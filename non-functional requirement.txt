@@ -1,0 +1,52 @@
+5. Other Nonfunctional Requirements
+
+5.1 Performance Requirements
+- The system shall enforce a rate limit of 1000 requests per IP per 15-minute window and return HTTP 429 with a retry-after hint when exceeded.
+- The system shall accept JSON and URL-encoded request bodies up to 10MB.
+- The database layer shall use a connection pool with max 5 connections, acquire timeout 30000 ms, idle timeout 10000 ms, and retry failed operations up to 3 times with exponential backoff.
+- The system shall paginate list endpoints (users, leaves, notifications, audits, reports) with client-configurable page and limit (typical 10–50 items per page) to bound response sizes.
+- The system shall maintain indexed queries on frequently used fields (e.g., leaves.userId, leaves.status, leaves.startDate/endDate, audits.createdAt) and enforce a composite unique key on leave_balances(userId, leaveTypeId, year).
+
+5.2 Safety Requirements
+- The system shall validate all external inputs server-side and return 4xx responses for invalid data to prevent unsafe operations.
+- The system shall sanitize and redact sensitive fields (password, token, secret, key, auth) from logs and audit metadata to prevent inadvertent disclosure.
+- The system shall restrict file uploads to jpeg|jpg|png|gif|pdf|doc|docx with a maximum of 5 files per request and 5MB per file to reduce risk from large or unsafe payloads.
+- The system shall avoid exposing internal error details to clients in production, returning user-safe messages for 5xx responses.
+- The system shall implement graceful shutdown to prevent data corruption, closing HTTP and database connections within 30 seconds upon SIGTERM/SIGINT.
+
+5.3 Security Requirements
+- The system shall authenticate API requests using JWT tokens in the format Bearer <token>, signed with JWT_SECRET, with a default expiry of 24 hours.
+- The system shall enforce role-based authorization for employee, manager, hr, and admin roles at the route level, denying access with HTTP 403 when roles are insufficient.
+- The system shall apply HTTP security headers via Helmet, including a Content Security Policy restricting defaultSrc to 'self' and limiting scripts, styles, frames, images, fonts, and objects to approved sources.
+- The system shall restrict cross-origin requests to FRONTEND_URL (default http://localhost:3000) with credentials enabled, and honor CORS for WebSocket connections.
+- The system shall hash all stored passwords using bcrypt with a cost factor of at least 12 and require a minimum password length of 6 characters.
+- The system shall log authentication, authorization, data access, data modification, system, and security events to an immutable audit trail with timestamps, userId (nullable), action, entityType/Id, category, severity, IP, and user agent.
+- The system shall provide admin-only access to audit endpoints (logs, realtime, stats, alerts, export, cleanup) and protect export/download routes.
+- The system shall detect security-relevant anomalies from audit data (e.g., repeated failed logins, excessive similar actions) and expose them via a protected alerts API.
+
+5.4 Software Quality Attributes
+- Reliability: The system shall provide centralized error handling for framework, validation, JWT, upload, and database errors, mapping to appropriate HTTP status codes.
+- Availability: The system shall expose a /health endpoint returning status, environment, uptime, and memory usage for operational checks.
+- Maintainability: The system shall separate concerns into routes, middleware, models, and utilities, and externalize configuration via environment variables validated at startup.
+- Scalability: The system shall be stateless at the API tier using JWTs, and support pagination and filtered queries to operate under increased data volume; WebSocket scaling (e.g., sticky sessions/adapter) shall be addressed during horizontal scaling.
+- Usability: The system shall provide consistent, descriptive error messages and standard response shapes including pagination metadata; the UI shall gate features based on role (manager/HR/admin).
+- Portability: The system shall run on Node.js/Express with Sequelize targeting PostgreSQL, configurable for SSL and timeouts.
+- Observability: The system shall log structured request context (URL, method, IP, user agent, userId when available) and expose audit statistics grouped by hour, day, week, or month.
+- Compliance: The system shall support audit retention management via admin-configured cleanup (1–3650 days) and ensure sensitive data redaction in logs.
+
+5.5 Business Rules
+- Leave Balance: The system shall prevent leave creation that would exceed a user’s remaining balance for the selected leave type and year.
+- Overlap: The system shall prevent creation of leave requests that overlap existing pending or approved leaves for the same user.
+- Approvals: The system shall allow managers to act only on leave requests from their direct reports; HR/admin may act per role.
+- Status Transitions: The system shall restrict cancellation to pending leaves; approval/rejection shall stamp approver and approvedAt.
+- Uniqueness: The system shall enforce uniqueness for users.employeeId, users.email, and the combination of leave_balances(userId, leaveTypeId, year).
+- Financial Year: The system shall compute balances by financial year (April 1–March 31), support carry forward up to configured limits, and support admin-triggered rollover creating next-year balances.
+- Defaults: When no leave types are present, the system shall create default leave types with predefined entitlements.
+- Notifications: The system shall notify the user’s manager on leave submission and notify the employee upon approval/rejection.
+
+6. Other Requirements
+- Health and Operations: The system shall provide a /health endpoint and structured startup/shutdown logs, including database connectivity checks before accepting traffic.
+- Audit Export: The system shall export audit logs in JSON, CSV, and Excel formats; Excel exports shall include category-specific worksheets and a summary sheet.
+- Static Assets & Uploads: The system shall serve the client UI from /public and uploaded files from /uploads (path configurable via UPLOAD_PATH).
+- Configuration: The system shall allow configuration via environment variables for PORT, FRONTEND_URL, database (host, port, name, user, password, SSL), JWT settings, rate limit settings, body/file size limits, upload path, and database timeouts.
+- Backup & Recovery (Assumption): Database backup/restore, RPO/RTO, and retention policies shall be defined and operated by the hosting environment/infrastructure.

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Export</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .debug-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        .warning { color: orange; }
+        #results { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Debug Export Functionality</h1>
+    
+    <div class="debug-section">
+        <h3>Test Export Functions</h3>
+        <button onclick="testExportFunction()">Test Export Function</button>
+        <button onclick="testDirectAPI()">Test Direct API Call</button>
+        <button onclick="testAuthToken()">Test Auth Token</button>
+        <button onclick="testGlobalFunctions()">Test Global Functions</button>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        // Mock the necessary variables and functions
+        const API_BASE = 'http://localhost:3000/api';
+        let authToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjQsImVtYWlsIjoiYWRtaW5AZGF0ZWMuY29tLmZqIiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzU0NDU3MzczLCJleHAiOjE3NTQ1NDM3NzN9.8S0Y_wKH2OCiA_r5N8HVFCaMA0_yufCl7fV2GdTvGcA';
+        
+        function showAlert(message, type) {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            results.appendChild(div);
+            console.log(`${type.toUpperCase()}: ${message}`);
+        }
+
+        async function exportAuditLogs() {
+            console.log('🚀 Export audit logs function called');
+            console.log('🔍 Function context:', this);
+            console.log('🔍 Window object:', window);
+            console.log('🔍 Auth token exists:', !!authToken);
+            console.log('🔍 API_BASE:', API_BASE);
+            
+            // Show immediate feedback
+            showAlert('Starting export process...', 'info');
+            
+            try {
+                // Get current filters (mock)
+                const filters = {
+                    startDate: null,
+                    endDate: null,
+                    category: null,
+                    severity: null,
+                    userId: null
+                };
+
+                console.log('📊 Current filters:', filters);
+
+                // For now, directly export to Excel without modal
+                const exportType = 'excel';
+                console.log('📋 Export type selected:', exportType);
+
+                const queryParams = new URLSearchParams();
+                Object.entries(filters).forEach(([key, value]) => {
+                    if (value) queryParams.append(key, value);
+                });
+
+                // Use Excel endpoint
+                const endpoint = '/audit/export-excel';
+                const url = `${API_BASE}${endpoint}?${queryParams}`;
+                console.log('🌐 Making request to:', url);
+
+                showAlert('Making API request...', 'info');
+
+                const response = await fetch(url, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                console.log('📡 Response status:', response.status);
+                console.log('📡 Response headers:', response.headers);
+
+                if (response.ok) {
+                    console.log('✅ Export successful, processing blob...');
+                    showAlert('Processing response...', 'info');
+                    
+                    const blob = await response.blob();
+                    console.log('📦 Blob size:', blob.size, 'bytes');
+                    
+                    if (blob.size === 0) {
+                        showAlert('Warning: Export file is empty. This might indicate no data was found.', 'warning');
+                        return;
+                    }
+                    
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    const timestamp = new Date().toISOString().split('T')[0];
+                    a.download = `audit_logs_${timestamp}.xlsx`;
+                    
+                    console.log('💾 Downloading file:', a.download);
+                    showAlert('Downloading file...', 'info');
+                    
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    showAlert(`Audit logs exported to Excel successfully! File size: ${blob.size} bytes`, 'success');
+                    console.log('✅ Export completed successfully');
+                } else {
+                    const errorText = await response.text();
+                    console.error('❌ Export failed with status:', response.status);
+                    console.error('❌ Error response:', errorText);
+                    showAlert(`Failed to export audit logs: ${response.status} - ${errorText}`, 'error');
+                }
+            } catch (error) {
+                console.error('❌ Error exporting audit logs:', error);
+                showAlert(`Error exporting audit logs: ${error.message}`, 'error');
+            }
+        }
+
+        async function testExportFunction() {
+            showAlert('Testing export function...', 'info');
+            await exportAuditLogs();
+        }
+
+        async function testDirectAPI() {
+            showAlert('Testing direct API call...', 'info');
+            try {
+                const response = await fetch(`${API_BASE}/audit/export-excel`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    showAlert(`Direct API call successful! Blob size: ${blob.size} bytes`, 'success');
+                } else {
+                    const errorText = await response.text();
+                    showAlert(`Direct API call failed: ${response.status} - ${errorText}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`Direct API call error: ${error.message}`, 'error');
+            }
+        }
+
+        function testAuthToken() {
+            showAlert('Testing auth token...', 'info');
+            showAlert(`Auth token exists: ${!!authToken}`, 'info');
+            showAlert(`API_BASE: ${API_BASE}`, 'info');
+            showAlert(`Token length: ${authToken ? authToken.length : 0}`, 'info');
+        }
+
+        function testGlobalFunctions() {
+            showAlert('Testing global functions...', 'info');
+            showAlert(`exportAuditLogs function exists: ${typeof window.exportAuditLogs === 'function'}`, 'info');
+            showAlert(`showAlert function exists: ${typeof showAlert === 'function'}`, 'info');
+        }
+    </script>
+</body>
+</html> 

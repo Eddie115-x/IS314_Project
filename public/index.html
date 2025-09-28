@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datec Leave Management System</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- Floating Particles -->
+    <div class="particles">
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+        <div class="particle"></div>
+    </div>
+
+    <!-- Authentication Section -->
+    <div id="auth-section">
+        <div class="auth-container">
+            <!-- Login Form -->
+            <form id="login-form" class="auth-form">
+                <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
+                <div class="form-group">
+                    <input type="email" id="login-email" name="email" required placeholder=" ">
+                    <label for="login-email">Email</label>
+                </div>
+                <div class="form-group">
+                    <input type="password" id="login-password" name="password" required placeholder=" ">
+                    <label for="login-password">Password</label>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-sign-in-alt"></i> Login
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-left">
+                    <button class="menu-toggle" data-action="toggle-sidebar">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1 class="page-title">
+                        <i class="fas fa-umbrella-beach"></i> Apply Leave
+                    </h1>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Layout -->
+        <div class="dashboard-layout">
+            <!-- Sidebar -->
+            <nav class="sidebar">
+                <div class="sidebar-header">
+                    <h2>Leave Management</h2>
+                </div>
+                <div class="user-section">
+                    <div class="user-info">
+                        <i class="fas fa-user"></i>
+                        <span id="user-employee-id">-</span>
+                    </div>
+                    <button class="logout-btn" data-action="logout">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+                <div class="nav-tabs">
+                    <button class="nav-tab" data-tab="overview">
+                        <i class="fas fa-home"></i> Home
+                    </button>
+                    <button class="nav-tab active" data-tab="leave-request">
+                        <i class="fas fa-umbrella-beach"></i> Apply For Leave
+                    </button>
+                    <button class="nav-tab" data-tab="my-leaves">
+                        <i class="fas fa-book"></i> My Leave
+                    </button>
+                    <button class="nav-tab manager-only" data-tab="leave-approvals" style="display: none;">
+                        <i class="fas fa-check-circle"></i> Leave Approvals
+                    </button>
+                    <button class="nav-tab admin-only" data-tab="admin" style="display: none;">
+                        <i class="fas fa-user-shield"></i> Admin
+                    </button>
+                    <button class="nav-tab admin-only" data-tab="leave-balance" style="display: none;">
+                        <i class="fas fa-balance-scale"></i> Leave Balance
+                    </button>
+                    <button class="nav-tab admin-only" data-tab="audit-logs" style="display: none;">
+                        <i class="fas fa-shield-alt"></i> Audit Logs
+                    </button>
+                </div>
+            </nav>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Overview Tab -->
+                <div id="overview" class="tab-content active">
+                    <div class="overview-content">
+                        <!-- Welcome Section -->
+                        <div class="welcome-section">
+                            <h2><i class="fas fa-user-circle"></i>👋Welcome, <span id="user-name">Employee</span></h2>
+                            <p class="employee-info">
+                                <i class="fas fa-id-badge"></i> Employee ID: <span id="user-employee-id-display">-</span>
+                                <span class="separator">|</span>
+                                <i class="fas fa-calendar-alt"></i> Financial Year: <span id="current-fy">2024-2025</span>
+                            </p>
+                        </div>
+
+                        <!-- Leave Balance Overview -->
+                        <div class="leave-balance-overview">
+                            <h3><i class="fas fa-balance-scale"></i> My Leave Balance</h3>
+                            <div class="balance-grid">
+                                <div class="balance-card annual-leave">
+                                    <div class="balance-header">
+                                        <i class="fas fa-umbrella-beach"></i>
+                                        <h4>Annual Leave</h4>
+                                    </div>
+                                    <div class="balance-details">
+                                        <div class="balance-item">
+                                            <span class="label">Entitlement:</span>
+                                            <span class="value" id="annual-entitlement">15.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Used:</span>
+                                            <span class="value" id="annual-used">0.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Remaining:</span>
+                                            <span class="value" id="annual-remaining">15.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Monthly Pro-rata:</span>
+                                            <span class="value">1.25 days</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="balance-card sick-leave">
+                                    <div class="balance-header">
+                                        <i class="fas fa-procedures"></i>
+                                        <h4>Sick Leave</h4>
+                                    </div>
+                                    <div class="balance-details">
+                                        <div class="balance-item">
+                                            <span class="label">Entitlement:</span>
+                                            <span class="value" id="sick-entitlement">10.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Used:</span>
+                                            <span class="value" id="sick-used">0.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Remaining:</span>
+                                            <span class="value" id="sick-remaining">10.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Monthly Pro-rata:</span>
+                                            <span class="value">0.83 days</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="balance-card bereavement-leave">
+                                    <div class="balance-header">
+                                        <i class="fas fa-heart"></i>
+                                        <h4>Bereavement Leave</h4>
+                                    </div>
+                                    <div class="balance-details">
+                                        <div class="balance-item">
+                                            <span class="label">Entitlement:</span>
+                                            <span class="value" id="bereavement-entitlement">3.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Used:</span>
+                                            <span class="value" id="bereavement-used">0.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Remaining:</span>
+                                            <span class="value" id="bereavement-remaining">3.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Monthly Pro-rata:</span>
+                                            <span class="value">0.25 days</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="balance-card lwop-leave">
+                                    <div class="balance-header">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                        <h4>LWOP</h4>
+                                    </div>
+                                    <div class="balance-details">
+                                        <div class="balance-item">
+                                            <span class="label">Entitlement:</span>
+                                            <span class="value" id="lwop-entitlement">0.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Used:</span>
+                                            <span class="value" id="lwop-used">0.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Remaining:</span>
+                                            <span class="value" id="lwop-remaining">0.0 days</span>
+                                        </div>
+                                        <div class="balance-item">
+                                            <span class="label">Monthly Pro-rata:</span>
+                                            <span class="value">0.0 days</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Quick Actions -->
+                        <div class="quick-actions">
+                            <h3><i class="fas fa-bolt"></i> Quick Actions</h3>
+                            <div class="action-buttons">
+                                <button class="action-btn" data-action="show-tab" data-target="leave-request">
+                                    <i class="fas fa-plus-circle"></i>
+                                    <span>Apply for Leave</span>
+                                </button>
+                                <button class="action-btn" data-action="show-tab" data-target="my-leaves">
+                                    <i class="fas fa-list"></i>
+                                    <span>View My Leaves</span>
+                                </button>
+                                <button class="action-btn" data-action="show-tab" data-target="notifications">
+                                    <i class="fas fa-bell"></i>
+                                    <span>Check Notifications</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Recent Activity -->
+                        <div class="recent-activity">
+                            <h3><i class="fas fa-history"></i> Recent Activity</h3>
+                            <div class="activity-list" id="recent-activity-list">
+                                <div class="activity-item">
+                                    <i class="fas fa-info-circle"></i>
+                                    <span>No recent activity</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leave Request Tab -->
+                <div id="leave-request" class="tab-content">
+                    <div class="form-section">
+                        <h3><i class="fas fa-umbrella-beach"></i> Apply Leave</h3>
+                        <form id="leave-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <select id="leave-type" required>
+                                        <option value="">Select Leave Type</option>
+                                    </select>
+                                    <label for="leave-type">Leave Type</label>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <input type="date" id="start-date" required placeholder=" ">
+                                    <label for="start-date">Start Date</label>
+                                </div>
+                                <div class="form-group">
+                                    <input type="date" id="end-date" required placeholder=" ">
+                                    <label for="end-date">End Date</label>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <input type="number" id="leave-hours" min="0" step="0.5" value="0" placeholder=" ">
+                                    <label for="leave-hours">Hours</label>
+                                    <button type="button" class="btn btn-secondary calculate-hours-btn" data-action="calculate-hours">
+                                        <i class="fas fa-calculator"></i> Calculate Hours
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <button type="button" class="btn btn-outline" data-action="add-attachment">
+                                    <i class="fas fa-plus"></i> Add Attachments
+                                </button>
+                            </div>
+                            <div class="form-group">
+                                <textarea id="leave-comments" rows="4" placeholder="Comments..."></textarea>
+                                <label for="leave-comments">Comments</label>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> Submit Request
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- My Leaves Tab -->
+                <div id="my-leaves" class="tab-content">
+                    <div class="form-section">
+                        <h3><i class="fas fa-list"></i> My Leave History</h3>
+                        <div class="leaves-filters">
+                            <select id="status-filter">
+                                <option value="">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                            </select>
+                            <input type="text" id="search-leaves" placeholder="Search leaves...">
+                        </div>
+                        <div id="leaves-list">
+                            <!-- Leave items will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leave Approvals Tab -->
+                <div id="leave-approvals" class="tab-content">
+                    <div class="form-section">
+                        <h3><i class="fas fa-check-circle"></i> Leave Approval Requests</h3>
+                        <div class="approvals-header">
+                            <div class="approval-stats">
+                                <span class="stat-item">
+                                    <i class="fas fa-clock"></i>
+                                    <span id="pending-count">0</span> Pending
+                                </span>
+                                <span class="stat-item">
+                                    <i class="fas fa-check"></i>
+                                    <span id="approved-count">0</span> Approved Today
+                                </span>
+                                <span class="stat-item">
+                                    <i class="fas fa-times"></i>
+                                    <span id="rejected-count">0</span> Rejected Today
+                                </span>
+                            </div>
+                            <button class="btn btn-secondary" data-action="refresh-approvals">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                        </div>
+                        <div class="approvals-filters">
+                            <select id="approval-status-filter">
+                                <option value="">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                            </select>
+                            <input type="text" id="search-approvals" placeholder="Search by employee name...">
+                        </div>
+                        <div id="approvals-list">
+                            <!-- Leave approval items will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notifications Tab -->
+                <div id="notifications" class="tab-content">
+                    <div class="form-section">
+                        <h3><i class="fas fa-bell"></i> Notifications</h3>
+                        <div class="notifications-header">
+                            <span id="notification-count">0 notifications</span>
+                            <button class="btn btn-secondary" data-action="mark-all-read">
+                                <i class="fas fa-check-double"></i> Mark All as Read
+                            </button>
+                        </div>
+                        <div id="notifications-list">
+                            <!-- Notifications will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Tab -->
+                <div id="admin" class="tab-content">
+                    <div class="admin-container">
+                        <!-- Register New Employee Section -->
+                        <div class="admin-section">
+                            <h3><i class="fas fa-user-plus"></i> Register New Employee</h3>
+                            <form id="register-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <input type="text" id="reg-employeeId" required placeholder=" ">
+                                        <label for="reg-employeeId">Employee ID</label>
+                                    </div>
+                                    <div class="form-group">
+                                        <input type="text" id="reg-firstName" required placeholder=" ">
+                                        <label for="reg-firstName">First Name</label>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <input type="text" id="reg-lastName" required placeholder=" ">
+                                        <label for="reg-lastName">Last Name</label>
+                                    </div>
+                                    <div class="form-group">
+                                        <input type="email" id="reg-email" required placeholder=" ">
+                                        <label for="reg-email">Email</label>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <input type="password" id="reg-password" required placeholder=" ">
+                                        <label for="reg-password">Password</label>
+                                    </div>
+                                    <div class="form-group">
+                                        <select id="reg-role" required>
+                                            <option value="">Select Role</option>
+                                            <option value="employee">Employee</option>
+                                            <option value="manager">Manager</option>
+                                            <option value="hr">HR</option>
+                                        </select>
+                                        <label for="reg-role">Role</label>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <input type="text" id="reg-department" required placeholder=" ">
+                                        <label for="reg-department">Department</label>
+                                    </div>
+                                    <div class="form-group">
+                                        <input type="text" id="reg-position" required placeholder=" ">
+                                        <label for="reg-position">Position</label>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <input type="date" id="reg-hireDate" required placeholder=" ">
+                                    <label for="reg-hireDate">Hire Date</label>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-user-plus"></i> Register Employee
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Password Reset Section -->
+                        <div class="admin-section">
+                            <h3><i class="fas fa-key"></i> Password Reset Management</h3>
+                            
+                            <!-- Reset All Passwords -->
+                            <div class="password-reset-section">
+                                <h4><i class="fas fa-users"></i> Reset All Employee Passwords</h4>
+                                <p class="section-description">
+                                    This will reset passwords for all active employees (excluding yourself) to a new password.
+                                </p>
+                                <form id="reset-all-passwords-form">
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <input type="password" id="new-password-all" required placeholder=" ">
+                                            <label for="new-password-all">New Password</label>
+                                        </div>
+                                        <div class="form-group">
+                                            <input type="password" id="confirm-password-all" required placeholder=" ">
+                                            <label for="confirm-password-all">Confirm Password</label>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-warning">
+                                        <i class="fas fa-key"></i> Reset All Passwords
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- Individual User Password Reset -->
+                            <div class="password-reset-section">
+                                <h4><i class="fas fa-user-edit"></i> Reset Individual User Password</h4>
+                                <p class="section-description">
+                                    Search and reset password for a specific employee.
+                                </p>
+                                <div class="user-search-section">
+                                    <div class="search-controls">
+                                        <input type="text" id="user-search-input" placeholder="Search by Employee ID, Name, or Email...">
+                                        <button class="btn btn-secondary" data-action="search-users">
+                                            <i class="fas fa-search"></i> Search
+                                        </button>
+                                    </div>
+                                    <div class="user-list" id="user-list">
+                                        <!-- User search results will be loaded here -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leave Balance Management Tab -->
+                <div id="leave-balance" class="tab-content">
+                    <div class="form-section">
+                        <h3><i class="fas fa-calculator"></i> Leave Balance Management</h3>
+                        
+                        <!-- Financial Year Info -->
+                        <div class="financial-year-info">
+                            <h4>Financial Year Information</h4>
+                            <div class="year-stats">
+                                <div class="stat-item">
+                                    <span class="stat-label">Current FY:</span>
+                                    <span class="stat-value" id="current-fy">2024-25</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Start Date:</span>
+                                    <span class="stat-value" id="fy-start">Apr 1, 2024</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">End Date:</span>
+                                    <span class="stat-value" id="fy-end">Mar 31, 2025</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Employee Search -->
+                        <div class="employee-search">
+                            <h4>Employee Leave Balances</h4>
+                            <div class="search-controls">
+                                <input type="text" id="employee-search" placeholder="Search employees...">
+                                <button class="btn btn-primary" data-action="load-employees">
+                                    <i class="fas fa-search"></i> Load Employees
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Employee List -->
+                        <div class="employee-list" id="employee-list">
+                            <!-- Employee cards will be loaded here -->
+                        </div>
+
+                        <!-- Default Leave Balance Settings -->
+                        <div class="default-leave-balance">
+                            <h4>Default Leave Balance Settings</h4>
+                            <div class="default-balance-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="default-annual-leave">Annual Leave (Days)</label>
+                                        <input type="number" id="default-annual-leave" min="0" step="0.5" value="20" placeholder=" ">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="default-sick-leave">Sick Leave (Days)</label>
+                                        <input type="number" id="default-sick-leave" min="0" step="0.5" value="10" placeholder=" ">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="default-personal-leave">Personal Leave (Days)</label>
+                                        <input type="number" id="default-personal-leave" min="0" step="0.5" value="5" placeholder=" ">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="default-max-carryover">Max Carry Over (Days)</label>
+                                        <input type="number" id="default-max-carryover" min="0" step="0.5" value="5" placeholder=" ">
+                                    </div>
+                                </div>
+                                <button class="btn btn-primary" data-action="save-default-balance">
+                                    <i class="fas fa-save"></i> Save Default Balance
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Financial Year Rollover -->
+                        <div class="financial-year-rollover">
+                            <h4>Financial Year Rollover</h4>
+                            <div class="rollover-controls">
+                                <label for="new-fy-year">New Financial Year:</label>
+                                <input type="number" id="new-fy-year" min="2020" max="2030" value="2025">
+                                <button class="btn btn-secondary" data-action="process-rollover">
+                                    <i class="fas fa-sync-alt"></i> Process Rollover
+                                </button>
+                            </div>
+                            <p class="rollover-info">
+                                This will apply the default leave balance to all employees and carry forward remaining annual leave (up to max carry over) for the new financial year.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Profile Tab -->
+                <div id="profile" class="tab-content">
+                    <div class="profile-container">
+                        <!-- Profile Header -->
+                        <div class="profile-header">
+                            <div class="profile-avatar" id="profile-avatar">JS</div>
+                            <div class="profile-info">
+                                <h2 id="profile-name">John Smith</h2>
+                                <p id="profile-email">john.smith@datec.com</p>
+                                <p id="profile-role">Employee</p>
+                            </div>
+                        </div>
+
+                        <!-- Profile Form -->
+                        <div class="form-section">
+                            <h3><i class="fas fa-user-edit"></i> Profile Information</h3>
+                            <form id="profile-form">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <input type="text" id="profile-firstName" required placeholder=" ">
+                                        <label for="profile-firstName">First Name</label>
+                                    </div>
+                                    <div class="form-group">
+                                        <input type="text" id="profile-lastName" required placeholder=" ">
+                                        <label for="profile-lastName">Last Name</label>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <input type="email" id="profile-email" required placeholder=" ">
+                                        <label for="profile-email">Email</label>
+                                    </div>
+                                    <div class="form-group">
+                                        <input type="text" id="profile-department" required placeholder=" ">
+                                        <label for="profile-department">Department</label>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <input type="text" id="profile-position" required placeholder=" ">
+                                    <label for="profile-position">Position</label>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Update Profile
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Password Change -->
+                        <div class="form-section">
+                            <h3><i class="fas fa-lock"></i> Change Password</h3>
+                            <form id="password-form">
+                                <div class="form-group">
+                                    <input type="password" id="current-password" required placeholder=" ">
+                                    <label for="current-password">Current Password</label>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <input type="password" id="new-password" required placeholder=" ">
+                                        <label for="new-password">New Password</label>
+                                    </div>
+                                    <div class="form-group">
+                                        <input type="password" id="confirm-password" required placeholder=" ">
+                                        <label for="confirm-password">Confirm Password</label>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-key"></i> Change Password
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Audit Logs Tab -->
+                <div id="audit-logs" class="tab-content">
+                    <div class="audit-container">
+                        <div class="audit-header">
+                            <h3><i class="fas fa-shield-alt"></i> Audit Logs</h3>
+                            <p>Comprehensive system activity logs for security and compliance</p>
+                            <div class="audit-controls">
+                                <button class="btn btn-primary" onclick="toggleRealtimeMonitoring()" id="realtime-toggle">
+                                    <i class="fas fa-broadcast-tower"></i> Enable Real-time
+                                </button>
+                                <button class="btn btn-warning" onclick="loadSecurityAlerts()">
+                                    <i class="fas fa-exclamation-triangle"></i> Security Alerts
+                                </button>
+                                <button class="btn btn-info" onclick="showAuditStats()">
+                                    <i class="fas fa-chart-bar"></i> Statistics
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Audit Filters -->
+                        <div class="audit-filters">
+                            <div class="filter-row">
+                                <div class="form-group">
+                                    <input type="text" id="audit-search" placeholder="Search actions, entities, descriptions..."></input>  
+                                    <label for="audit-search">Search</label>
+                                </div>
+                                <div class="form-group">
+                                    
+                                    <select id="audit-user-filter">
+                                        <option value="">All Users</option>
+                                    </select>
+                                    <label for="audit-user-filter">User</label>
+                                </div>
+                                <div class="form-group">
+                                    
+                                    <select id="audit-action-filter">
+                                        <option value="">All Actions</option>
+                                        <option value="login">Login</option>
+                                        <option value="logout">Logout</option>
+                                        <option value="create">Create</option>
+                                        <option value="update">Update</option>
+                                        <option value="delete">Delete</option>
+                                        <option value="read">Read</option>
+                                        <option value="password_reset">Password Reset</option>
+                                    </select>
+                                    <label for="audit-action-filter">Action</label>
+                                </div>
+                                <div class="form-group">
+                                    
+                                    <select id="audit-category-filter">
+                                        <option value="">All Categories</option>
+                                        <option value="authentication">Authentication</option>
+                                        <option value="authorization">Authorization</option>
+                                        <option value="data_access">Data Access</option>
+                                        <option value="data_modification">Data Modification</option>
+                                        <option value="system">System</option>
+                                        <option value="security">Security</option>
+                                    </select>
+                                    <label for="audit-category-filter">Category</label>
+                                </div>
+                            </div>
+                            <div class="filter-row">
+                                <div class="form-group">
+                                    
+                                    <select id="audit-severity-filter">
+                                        <option value="">All Severities</option>
+                                        <option value="low">Low</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="high">High</option>
+                                        <option value="critical">Critical</option>
+                                    </select>
+                                    <label for="audit-severity-filter">Severity</label>
+                                </div>
+                                <div class="form-group">
+                                    
+                                    <select id="audit-sort-by">
+                                        <option value="createdAt">Timestamp</option>
+                                        <option value="action">Action</option>
+                                        <option value="category">Category</option>
+                                        <option value="severity">Severity</option>
+                                        <option value="userId">User</option>
+                                    </select>
+                                    <label for="audit-sort-by">Sort By</label>
+                                </div>
+                                <div class="form-group">
+                                    
+                                    <select id="audit-sort-order">
+                                        <option value="desc">Newest First</option>
+                                        <option value="asc">Oldest First</option>
+                                    </select>
+                                    <label for="audit-sort-order">Order</label>
+                                </div>
+                                <div class="form-group">
+                                    
+                                    <input type="date" id="audit-start-date">
+                                    <label for="audit-start-date">Start Date</label>
+                                </div>
+                                <div class="form-group">
+                                    
+                                    <input type="date" id="audit-end-date">
+                                    <label for="audit-end-date">End Date</label>
+                                </div>
+                            </div>
+                            <div class="filter-actions">
+                                <button class="btn btn-primary" onclick="loadAuditLogs(1)">
+                                    <i class="fas fa-search"></i> Search
+                                </button>
+                                <button class="btn btn-secondary" onclick="console.log('Export button clicked'); exportAuditLogs()">
+                                    <i class="fas fa-download"></i> Export
+                                </button>
+                                <button class="btn btn-outline" onclick="clearAuditFilters()">
+                                    <i class="fas fa-times"></i> Clear Filters
+                                </button>
+                                <button class="btn btn-warning" onclick="testExportDirectly()" style="background-color: #ffc107; color: #000;">
+                                    <i class="fas fa-bug"></i> Test Export
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Audit Statistics -->
+                        <div class="audit-stats">
+                            <div class="stat-card">
+                                <h4>Total Events</h4>
+                                <span id="total-audit-events">0</span>
+                            </div>
+                            <div class="stat-card">
+                                <h4>Successful</h4>
+                                <span id="successful-audit-events">0</span>
+                            </div>
+                            <div class="stat-card">
+                                <h4>Failed</h4>
+                                <span id="failed-audit-events">0</span>
+                            </div>
+                            <div class="stat-card">
+                                <h4>High Severity</h4>
+                                <span id="high-severity-events">0</span>
+                            </div>
+                            <div class="stat-card">
+                                <h4>Real-time Status</h4>
+                                <span id="realtime-status">Inactive</span>
+                            </div>
+                        </div>
+
+                        <!-- Security Alerts Section -->
+                        <div class="security-alerts" id="security-alerts" style="display: none;">
+                            <h4><i class="fas fa-exclamation-triangle"></i> Security Alerts</h4>
+                            <div class="alerts-container" id="alerts-container">
+                                <!-- Alerts will be populated here -->
+                            </div>
+                        </div>
+
+                        <!-- Audit Logs Table -->
+                        <div class="audit-logs-table">
+                            <div class="table-header">
+                                <h4>Audit Logs</h4>
+                                <div class="table-controls">
+                                    <span id="audit-count">0 records</span>
+                                    <button class="btn btn-sm btn-outline" onclick="refreshAuditLogs()">
+                                        <i class="fas fa-sync-alt"></i> Refresh
+                                    </button>
+                                </div>
+                            </div>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>User</th>
+                                        <th>Action</th>
+                                        <th>Entity</th>
+                                        <th>Category</th>
+                                        <th>Severity</th>
+                                        <th>Status</th>
+                                        <th>IP Address</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="audit-logs-tbody">
+                                    <!-- Audit logs will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div class="pagination" id="audit-pagination">
+                            <!-- Pagination controls will be added here -->
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="script.js?v=7"></script>
+</body>
+</html> 

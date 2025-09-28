@@ -1,0 +1,201 @@
+# Datec Leave Management System - Comprehensive Overview
+
+## 🏗️ **System Architecture Overview**
+
+### **Technology Stack**
+- **Backend**: Node.js + Express.js
+- **Database**: PostgreSQL with Sequelize ORM
+- **Frontend**: Vanilla HTML/CSS/JavaScript (Single Page Application)
+- **Authentication**: JWT (JSON Web Tokens)
+- **File Handling**: Multer for uploads, ExcelJS for exports
+- **Real-time**: Socket.io for notifications
+- **Security**: Helmet.js, CORS, Rate limiting
+
+---
+
+## 🖥️ **Frontend Details**
+
+### **File Structure**
+```
+public/
+├── index.html (48KB) - Main application interface
+├── script.js (135KB) - Core JavaScript functionality  
+├── styles.css (56KB) - Styling and responsive design
+└── debug-export.html (7.2KB) - Debug/testing interface
+```
+
+### **Key Frontend Features**
+- **Tab-based Navigation**: Dashboard, Apply Leave, My Leaves, Leave Approvals, Admin
+- **Responsive Design**: Mobile-friendly interface with CSS Grid/Flexbox
+- **Dynamic Content**: JavaScript-driven UI updates and form handling
+- **File Uploads**: Drag & drop attachment support
+- **Real-time Updates**: Live notifications and status changes
+- **Export Functionality**: Excel export for audit logs and reports
+
+### **User Interface Components**
+- **Login Form**: Email/password authentication
+- **Leave Application**: Date pickers, type selection, hours calculation
+- **Leave Approvals**: Manager dashboard for department leave requests
+- **Admin Panel**: User management, leave balance control, audit logs
+- **Responsive Tables**: Paginated data display with sorting/filtering
+
+---
+
+## ⚙️ **Backend Details**
+
+### **Server Configuration**
+- **Port**: 3000 (configurable via environment)
+- **Security**: Helmet.js with Content Security Policy
+- **Rate Limiting**: 1000 requests per 15 minutes per IP
+- **File Size**: 10MB limit for uploads
+- **CORS**: Configurable origin with credentials
+
+### **API Routes Structure**
+```
+routes/
+├── auth.js (14KB) - Authentication & authorization
+├── leaves.js (19KB) - Leave request management
+├── users.js (12KB) - User CRUD operations
+├── audit.js (19KB) - Audit logging & exports
+├── admin.js (11KB) - Administrative functions
+├── reports.js (12KB) - Reporting & analytics
+└── notifications.js (5.8KB) - Real-time notifications
+```
+
+### **Key Backend Features**
+- **JWT Authentication**: Secure token-based auth with role validation
+- **Audit Logging**: Comprehensive activity tracking middleware
+- **File Processing**: Excel generation, file uploads, image handling
+- **Email Notifications**: Nodemailer integration for leave updates
+- **Real-time Communication**: Socket.io for live updates
+- **Error Handling**: Global exception handlers and middleware
+
+---
+
+## 🗄️ **Database Details**
+
+### **Database Engine**
+- **Type**: PostgreSQL
+- **ORM**: Sequelize.js with connection pooling
+- **Connection**: Configurable host, port, SSL support
+- **Pooling**: Max 5 connections, configurable timeouts
+
+### **Data Models**
+```
+models/
+├── User.js - Employee accounts & authentication
+├── Leave.js - Leave request records
+├── LeaveType.js - Leave categories (sick, annual, etc.)
+├── LeaveBalance.js - Individual leave balances
+├── DefaultBalance.js - Default leave allocations
+├── Audit.js - System activity logging
+└── Notification.js - User notifications
+```
+
+### **Key Database Features**
+- **User Management**: Employee profiles, roles, departments
+- **Leave Tracking**: Request lifecycle, approval workflow
+- **Balance Management**: Automatic calculations, year rollovers
+- **Audit Trail**: Complete activity logging with user tracking
+- **Relationships**: Manager-employee hierarchies, department structures
+
+---
+
+## 🔐 **Security & Authentication**
+
+### **Authentication System**
+- **JWT Tokens**: 24-hour expiration, refreshable
+- **Password Security**: bcrypt hashing (12 rounds)
+- **Role-Based Access**: employee, manager, hr, admin
+- **Session Management**: Automatic token validation
+
+### **Security Features**
+- **Content Security Policy**: XSS protection
+- **Rate Limiting**: DDoS protection
+- **Input Validation**: Express-validator middleware
+- **SQL Injection Protection**: Sequelize ORM
+- **File Upload Security**: Type and size validation
+
+---
+
+## 📊 **Core Functionality**
+
+### **Leave Management Workflow**
+1. **Employee**: Submit leave request with dates, type, comments
+2. **Manager**: Review and approve/reject with comments
+3. **HR**: Oversee process, manage balances
+4. **Admin**: System administration, user management
+
+### **Key Features**
+- **Leave Types**: Sick, Annual, Personal, Maternity/Paternity
+- **Balance Tracking**: Automatic calculation, year-end rollovers
+- **Approval Chain**: Manager → HR → Final approval
+- **Notifications**: Real-time updates via Socket.io
+- **Reporting**: Excel exports, audit logs, analytics
+
+---
+
+## 🚀 **Development & Deployment**
+
+### **Scripts**
+```json
+{
+  "start": "node server.js",
+  "dev": "nodemon server.js", 
+  "test": "jest",
+  "seed": "node seed.js"
+}
+```
+
+### **Environment Variables**
+- Database configuration (host, user, password, name)
+- JWT secrets and expiration
+- Email service settings
+- Security configurations
+
+### **Testing**
+- Jest framework for unit testing
+- Supertest for API testing
+- Test coverage for critical functions
+
+---
+
+## 📋 **Current Status & Issues**
+
+### **Working Features**
+- ✅ User authentication and role management
+- ✅ Leave application and approval workflow
+- ✅ Audit logging and export functionality
+- ✅ File upload and attachment handling
+- ✅ Real-time notifications
+
+### **Known Issues**
+- ⚠️ Form element detection in leave application (being debugged)
+- ⚠️ Login form input retrieval (recently fixed)
+- ⚠️ Excel export column alignment (resolved)
+
+### **Recent Improvements**
+- Enhanced debugging and error handling
+- Improved form validation and user feedback
+- Better error messages and logging
+- Cache-busting for script updates
+
+---
+
+## 🎯 **System Summary**
+
+This system represents a **production-ready leave management solution** with comprehensive features for HR departments, managers, and employees. The architecture follows modern web development best practices with security, scalability, and maintainability in mind.
+
+### **Key Strengths**
+- **Comprehensive Feature Set**: Covers all aspects of leave management
+- **Security-First Approach**: Multiple layers of security protection
+- **Scalable Architecture**: Modular design with clear separation of concerns
+- **Real-time Capabilities**: Live updates and notifications
+- **Audit & Compliance**: Complete activity logging for regulatory requirements
+
+### **Use Cases**
+- **Small to Medium Enterprises**: Complete leave management solution
+- **HR Departments**: Streamlined leave approval workflows
+- **Managers**: Department leave oversight and approval
+- **Employees**: Self-service leave application and tracking
+- **Administrators**: System management and reporting
