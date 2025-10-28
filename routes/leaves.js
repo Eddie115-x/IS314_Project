@@ -5,6 +5,7 @@ const path = require('path');
 const moment = require('moment');
 const { Op } = require('sequelize');
 const { Leave, LeaveType, LeaveBalance, User } = require('../models');
+const { initializeEmployeeLeaveBalances } = require('../utils/leaveBalance');
 const { authenticateToken, isManagerOrHR } = require('../middleware/auth');
 const { createNotification } = require('../utils/notifications');
 const AuditLogger = require('../utils/auditLogger');
@@ -160,15 +161,32 @@ router.post('/', [
 
     console.log('Calculated days:', numberOfDays);
 
-    // Check leave balance
+    // Check leave balance (initialize if missing)
     const currentYear = moment().year();
-    const leaveBalance = await LeaveBalance.findOne({
+    let leaveBalance = await LeaveBalance.findOne({
       where: {
         userId: req.user.id,
         leaveTypeId,
         year: currentYear
       }
     });
+
+    // If no balance exists for the user for this year, initialize balances and re-check
+    if (!leaveBalance) {
+      try {
+        console.log('No leave balance found for user', req.user.id, '- initializing balances for year', currentYear);
+        await initializeEmployeeLeaveBalances(req.user.id, currentYear);
+        leaveBalance = await LeaveBalance.findOne({
+          where: {
+            userId: req.user.id,
+            leaveTypeId,
+            year: currentYear
+          }
+        });
+      } catch (initErr) {
+        console.error('Error initializing leave balances for user', req.user.id, initErr);
+      }
+    }
 
     console.log('Leave balance check:', {
       currentYear,
@@ -225,6 +243,33 @@ router.post('/', [
       });
     }
 
+    // Prevent rapid duplicate submissions: check for a very recent pending leave with identical key fields
+    try {
+      const recentDuplicate = await Leave.findOne({
+        where: {
+          userId: req.user.id,
+          leaveTypeId,
+          startDate,
+          endDate,
+          numberOfDays,
+          status: 'pending',
+          createdAt: { [Op.gte]: moment().subtract(5, 'minutes').toDate() }
+        }
+      });
+
+      if (recentDuplicate) {
+        console.warn('Duplicate leave submission detected, returning existing record id:', recentDuplicate.id);
+        return res.status(409).json({
+          error: 'Duplicate Submission',
+          message: 'A similar leave request was submitted recently. Please check your leave history.',
+          existing: recentDuplicate
+        });
+      }
+    } catch (dupErr) {
+      console.error('Error checking for duplicate leave submissions:', dupErr);
+      // continue - not fatal
+    }
+
     // Create leave application
     const leaveData = {
       userId: req.user.id,
@@ -264,18 +309,12 @@ router.post('/', [
       reason: reason.substring(0, 100) // Truncate for audit log
     }, req);
 
-    // Send notification to manager/HR
-    const manager = await User.findByPk(req.user.managerId);
-    if (manager) {
-      await createNotification({
-        userId: manager.id,
-        title: 'New Leave Request',
-        message: `${req.user.getFullName()} has submitted a leave request for ${numberOfDays} day(s)`,
-        type: 'info',
-        category: 'leave_request',
-        relatedId: leave.id,
-        relatedType: 'leave'
-      });
+    // Create tailored notifications for this submission (employee + manager(s)) in one operation
+    try {
+      await createLeaveSubmissionNotifications(leave, req.user);
+    } catch (notifErr) {
+      console.error('Failed to create leave submission notifications:', notifErr);
+      // Do not block the response if notifications fail
     }
 
     console.log('Leave submission completed successfully');
@@ -390,12 +429,12 @@ router.get('/:id', authenticateToken, async (req, res) => {
         },
         {
           model: User,
-          as: 'User',
-          attributes: ['id', 'firstName', 'lastName', 'email', 'department']
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email', 'department', 'position', 'managerId']
         },
         {
           model: User,
-          as: 'Approver',
+          as: 'approver',
           attributes: ['id', 'firstName', 'lastName', 'email']
         }
       ]
@@ -408,6 +447,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
       });
     }
 
+    // Normalize include aliases for backward compatibility (client expects .User/.Approver)
+    const out = leave.toJSON();
+    out.User = out.user || null;
+    out.Approver = out.approver || null;
+
     // Check if user has permission to view this leave
     if (leave.userId !== req.user.id && 
         !['manager', 'hr', 'admin'].includes(req.user.role) &&
@@ -418,7 +462,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       });
     }
 
-    res.json({ leave });
+    res.json({ leave: out });
   } catch (error) {
     console.error('Get leave error:', error);
     res.status(500).json({
@@ -509,7 +553,7 @@ router.get('/pending/approvals', [authenticateToken, isManagerOrHR], [
         },
         {
           model: User,
-          as: 'User',
+          as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email', 'department', 'position']
         }
       ],
@@ -517,9 +561,15 @@ router.get('/pending/approvals', [authenticateToken, isManagerOrHR], [
       limit: parseInt(limit),
       offset: parseInt(offset)
     });
+    // Convert to plain objects and preserve previous .User alias for clients
+    const formattedLeaves = leaves.map(l => {
+      const obj = l.toJSON();
+      obj.User = obj.user || null;
+      return obj;
+    });
 
     res.json({
-      leaves,
+      leaves: formattedLeaves,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(count / limit),
@@ -578,15 +628,22 @@ router.get('/all', [authenticateToken, isManagerOrHR], [
       where: whereClause,
       include: [
         { model: LeaveType, as: 'leaveType', attributes: ['name', 'color'] },
-        { model: User, as: 'User', attributes: ['id', 'firstName', 'lastName', 'email', 'department', 'position'], where: Object.keys(userFilter).length ? userFilter : undefined }
+        { model: User, as: 'user', attributes: ['id', 'firstName', 'lastName', 'email', 'department', 'position'], where: Object.keys(userFilter).length ? userFilter : undefined }
       ],
       order: [['createdAt', 'DESC']],
       limit: parseInt(limit),
       offset: parseInt(offset)
     });
 
+    // Format to include .User alias for compatibility
+    const formattedLeaves = leaves.map(l => {
+      const obj = l.toJSON();
+      obj.User = obj.user || null;
+      return obj;
+    });
+
     res.json({
-      leaves,
+      leaves: formattedLeaves,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(count / limit),
@@ -618,13 +675,13 @@ router.put('/:id/approve', [authenticateToken, isManagerOrHR], [
       });
     }
 
-    const { action, rejectionReason } = req.body;
+  const { action, rejectionReason, managerNotes } = req.body;
 
     const leave = await Leave.findByPk(req.params.id, {
       include: [
         {
           model: User,
-          as: 'User',
+          as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email', 'managerId']
         },
         {
@@ -651,7 +708,9 @@ router.put('/:id/approve', [authenticateToken, isManagerOrHR], [
 
     // Check if user has permission to approve this leave
     if (req.user.role === 'manager') {
-      if (leave.User.managerId !== req.user.id) {
+      const leaveJson = leave.toJSON();
+      const requesterManagerId = leaveJson.user ? leaveJson.user.managerId : null;
+      if (requesterManagerId !== req.user.id) {
         return res.status(403).json({
           error: 'Access Denied',
           message: 'You can only approve leave applications from your team members'
@@ -661,7 +720,8 @@ router.put('/:id/approve', [authenticateToken, isManagerOrHR], [
 
     const updateData = {
       approvedBy: req.user.id,
-      approvedAt: new Date()
+      approvedAt: new Date(),
+      ...(managerNotes && { managerNotes })
     };
 
     if (action === 'approve') {
@@ -680,7 +740,8 @@ router.put('/:id/approve', [authenticateToken, isManagerOrHR], [
       status: action === 'approve' ? 'approved' : 'rejected',
       approvedBy: req.user.id,
       approvedAt: new Date(),
-      ...(action === 'reject' && { rejectionReason })
+      ...(action === 'reject' && { rejectionReason }),
+      ...(managerNotes && { managerNotes })
     }, req);
 
     // Send notification to employee

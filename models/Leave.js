@@ -68,6 +68,11 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true
     },
+    managerNotes: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Optional notes added by manager when approving or rejecting'
+    },
     attachmentPath: {
       type: DataTypes.STRING,
       allowNull: true

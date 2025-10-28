@@ -25,7 +25,8 @@ const sequelize = new Sequelize(
       max: parseInt(process.env.DB_POOL_MAX) || 5,
       min: parseInt(process.env.DB_POOL_MIN) || 0,
       acquire: parseInt(process.env.DB_POOL_ACQUIRE) || 30000,
-      idle: parseInt(process.env.DB_POOL_IDLE) || 10000
+      // increase default idle to 60s to avoid frequent connect/disconnect churn
+      idle: parseInt(process.env.DB_POOL_IDLE) || 60000
     },
     define: {
       timestamps: true,
@@ -95,7 +96,9 @@ sequelize.addHook('afterConnect', async (connection) => {
 // Handle connection errors
 sequelize.addHook('afterDisconnect', async (connection) => {
   try {
-    console.log('🔌 Database connection closed');
+    // Note: this hook runs for individual pool connections being released/closed.
+    // Avoid implying the whole Sequelize instance is shut down.
+    console.log('🔌 Database connection released/closed (pool connection)');
   } catch (error) {
     console.error('❌ Error in afterDisconnect hook:', error);
   }

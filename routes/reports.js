@@ -67,7 +67,7 @@ router.get('/dashboard', [authenticateToken, authorizeRoles('hr', 'admin')], [
       include: [
         {
           model: User,
-          as: 'User',
+          as: 'user',
           attributes: ['department'],
           where: department ? { department } : {}
         }
@@ -76,7 +76,7 @@ router.get('/dashboard', [authenticateToken, authorizeRoles('hr', 'admin')], [
         [Leave.Sequelize.fn('COUNT', Leave.Sequelize.col('id')), 'count'],
         [Leave.Sequelize.fn('SUM', Leave.Sequelize.col('numberOfDays')), 'totalDays']
       ],
-      group: ['User.department']
+      group: ['user.department']
     });
 
     // Get pending approvals count
@@ -140,7 +140,7 @@ router.get('/leave-report', [authenticateToken, authorizeRoles('hr', 'admin')], 
       include: [
         {
           model: User,
-          as: 'User',
+          as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'email', 'department', 'position'],
           where: department ? { department } : {}
         },
@@ -151,7 +151,7 @@ router.get('/leave-report', [authenticateToken, authorizeRoles('hr', 'admin')], 
         },
         {
           model: User,
-          as: 'Approver',
+          as: 'approver',
           attributes: ['id', 'firstName', 'lastName']
         }
       ],
@@ -160,8 +160,16 @@ router.get('/leave-report', [authenticateToken, authorizeRoles('hr', 'admin')], 
       offset: parseInt(offset)
     });
 
+    // format leaves to include backward-compatible .User and .Approver fields
+    const formattedLeaves = leaves.map(l => {
+      const obj = l.toJSON();
+      obj.User = obj.user || null;
+      obj.Approver = obj.approver || null;
+      return obj;
+    });
+
     res.json({
-      leaves,
+      leaves: formattedLeaves,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(count / limit),
@@ -280,7 +288,7 @@ router.get('/department-report', [authenticateToken, authorizeRoles('hr', 'admin
       include: [
         {
           model: User,
-          as: 'User',
+          as: 'user',
           attributes: ['department']
         }
       ],
@@ -290,7 +298,7 @@ router.get('/department-report', [authenticateToken, authorizeRoles('hr', 'admin
         [Leave.Sequelize.fn('AVG', Leave.Sequelize.col('numberOfDays')), 'averageDays'],
         'status'
       ],
-      group: ['User.department', 'status']
+      group: ['user.department', 'status']
     });
 
     res.json({ departmentStats });
@@ -354,7 +362,7 @@ router.get('/team-report', [authenticateToken, authorizeRoles('manager')], [
       include: [
         {
           model: User,
-          as: 'User',
+          as: 'user',
           attributes: ['id', 'firstName', 'lastName', 'department']
         },
         {
@@ -383,7 +391,7 @@ router.get('/team-report', [authenticateToken, authorizeRoles('manager')], [
 
     res.json({
       teamMembers,
-      teamLeaves,
+      teamLeaves: teamLeaves.map(l => { const o = l.toJSON(); o.User = o.user || null; return o; }),
       teamBalances
     });
   } catch (error) {

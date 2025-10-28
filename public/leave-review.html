@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Review Leave Request</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container" style="padding-top:100px; padding-bottom:120px;">
+    <header style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+      <h1 style="font-size:20px; color:var(--text-primary);">Review Leave Request</h1>
+      <a href="/index.html" class="btn btn-outline">Back to Dashboard</a>
+    </header>
+
+    <main id="review-container">
+      <div id="loading" class="form-section">Loading leave details...</div>
+
+      <!-- Card for leave details -->
+      <div id="leave-details" class="form-section" style="display:none;"></div>
+
+      <!-- Fixed action bar -->
+      <div id="actions" class="review-actions" style="display:none;"></div>
+    </main>
+  </div>
+
+  <script src="leave-review.js"></script>
+</body>
+</html>

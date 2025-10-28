@@ -50,5 +50,14 @@ describe('Datec Leave Management System API', () => {
       
       expect(response.body).toHaveProperty('error', 'Access token required');
     });
+
+    it('should reject audit notifications access without token', async () => {
+      const response = await request(app)
+        .get('/api/notifications/audit/all')
+        .expect(401);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body).toHaveProperty('message');
+    });
   });
 }); 

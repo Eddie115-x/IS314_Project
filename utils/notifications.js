@@ -67,6 +67,8 @@ const sendLeaveRequestNotification = async (leave, user) => {
       message: `${user.getFullName()} has submitted a leave request for ${leave.numberOfDays} day(s)`,
       type: 'info',
       category: 'leave_request',
+      // mark these as intended for managers so we can enforce access rules
+      recipientRole: 'manager',
       relatedId: leave.id,
       relatedType: 'leave'
     }));
@@ -74,6 +76,71 @@ const sendLeaveRequestNotification = async (leave, user) => {
     return await sendBulkNotifications(notifications);
   } catch (error) {
     console.error('Error sending leave request notification:', error);
+    throw error;
+  }
+};
+
+/**
+ * Create tailored notifications when an employee submits a leave request.
+ * This will notify the submitter (employee) and the relevant manager(s) with role-targeted messages.
+ * The function attempts to send all notifications in a single bulk call and returns the created notifications.
+ */
+const createLeaveSubmissionNotifications = async (leave, submitter) => {
+  try {
+    const notifications = [];
+
+    // Employee confirmation notification
+    notifications.push({
+      userId: submitter.id,
+      title: 'Leave Submitted',
+      message: `Your leave request for ${leave.numberOfDays} day(s) has been submitted and is pending approval.`,
+      type: 'info',
+      category: 'system',
+      recipientRole: 'employee',
+      relatedId: leave.id,
+      relatedType: 'leave'
+    });
+
+    // If the submitter has an explicit manager, notify that manager only (tailored).
+    if (submitter.managerId) {
+      notifications.push({
+        userId: submitter.managerId,
+        title: 'New Leave Request',
+        message: `${submitter.getFullName()} has submitted a leave request for ${leave.numberOfDays} day(s).`,
+        type: 'info',
+        category: 'leave_request',
+        recipientRole: 'manager',
+        relatedId: leave.id,
+        relatedType: 'leave'
+      });
+    } else {
+      // Fallback: notify all active users with manager/hr/admin roles
+      const managers = await User.findAll({
+        where: {
+          role: { [Op.in]: ['manager', 'hr', 'admin'] },
+          isActive: true
+        }
+      });
+
+      managers.forEach(m => {
+        notifications.push({
+          userId: m.id,
+          title: 'New Leave Request',
+          message: `${submitter.getFullName()} has submitted a leave request for ${leave.numberOfDays} day(s).`,
+          type: 'info',
+          category: 'leave_request',
+          recipientRole: 'manager',
+          relatedId: leave.id,
+          relatedType: 'leave'
+        });
+      });
+    }
+
+    // Use bulk creation which will also emit socket events
+    const created = await sendBulkNotifications(notifications);
+    return created;
+  } catch (error) {
+    console.error('Error creating leave submission notifications:', error);
     throw error;
   }
 };
@@ -135,6 +202,7 @@ module.exports = {
   createNotification,
   sendBulkNotifications,
   sendLeaveRequestNotification,
+  createLeaveSubmissionNotifications,
   sendLeaveApprovalNotification,
   sendSystemNotification,
   sendReminderNotification

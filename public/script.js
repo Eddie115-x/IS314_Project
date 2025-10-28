@@ -1,6 +1,40 @@
 const API_BASE = 'http://localhost:3000/api';
 let currentUser = null;
 let authToken = localStorage.getItem('authToken');
+
+// Centralized auth token getter and fetch wrapper
+function getAuthToken() {
+    return localStorage.getItem('authToken') || localStorage.getItem('token') || localStorage.getItem('accessToken') || null;
+}
+
+async function apiFetch(path, options = {}) {
+    const token = getAuthToken();
+    const url = path.startsWith('http') ? path : `${API_BASE}${path.startsWith('/') ? path : '/' + path}`;
+
+    const headers = new Headers(options.headers || {});
+
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+
+    // If body is JSON and Content-Type is not set, set it
+    if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
+        headers.set('Content-Type', 'application/json');
+    }
+
+    const opts = Object.assign({}, options, { headers });
+
+    const res = await fetch(url, opts);
+
+    if (res.status === 401) {
+        // Clear stored tokens and redirect to login
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
+        localStorage.removeItem('accessToken');
+        // slight delay to allow UI update
+        setTimeout(() => { window.location.href = '/'; }, 800);
+    }
+
+    return res;
+}
 let selectedFiles = []; // Global variable to store selected files
 
 // Wait for DOM to be fully loaded
@@ -79,8 +113,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target.closest('.notification-item')) {
             const notificationItem = e.target.closest('.notification-item');
             const notificationId = notificationItem.getAttribute('data-notification-id');
+            const relatedType = notificationItem.getAttribute('data-related-type');
+            const relatedId = notificationItem.getAttribute('data-related-id');
             if (notificationId) {
-                markAsRead(notificationId);
+                // Open notification (marks as read and navigates if related)
+                openNotification(notificationId, relatedType, relatedId);
             }
         }
     });
@@ -291,24 +328,34 @@ function updateUserInfo() {
     setTimeout(() => {
         const leaveForm = document.getElementById('leave-form');
         if (leaveForm) {
-            console.log('Adding direct event listener to leave form');
-            leaveForm.addEventListener('submit', function(e) {
-                e.preventDefault();
-                console.log('Direct leave form submit detected');
-                handleLeaveRequest(e);
-            });
+            if (!leaveForm.dataset.listenerAdded) {
+                console.log('Adding direct event listener to leave form');
+                leaveForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    console.log('Direct leave form submit detected');
+                    handleLeaveRequest(e);
+                });
+                leaveForm.dataset.listenerAdded = 'true';
+            } else {
+                console.debug('Leave form submit listener already added - skipping');
+            }
         }
         
         const submitBtn = document.querySelector('#leave-form button[type="submit"]');
         if (submitBtn) {
-            console.log('Adding direct click listener to submit button');
-            submitBtn.addEventListener('click', function(e) {
-                console.log('Submit button clicked via direct listener');
-                const form = this.closest('form');
-                if (form) {
-                    form.dispatchEvent(new Event('submit', { bubbles: true }));
-                }
-            });
+            if (!submitBtn.dataset.listenerAdded) {
+                console.log('Adding direct click listener to submit button');
+                submitBtn.addEventListener('click', function(e) {
+                    console.log('Submit button clicked via direct listener');
+                    const form = this.closest('form');
+                    if (form) {
+                        form.dispatchEvent(new Event('submit', { bubbles: true }));
+                    }
+                });
+                submitBtn.dataset.listenerAdded = 'true';
+            } else {
+                console.debug('Submit button click listener already added - skipping');
+            }
         }
     }, 1000);
     
@@ -590,11 +637,7 @@ async function loadDashboardData() {
 
 async function loadLeaveStats() {
     try {
-        const response = await fetch(`${API_BASE}/leaves`, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
+        const response = await apiFetch('/leaves');
 
         if (response.ok) {
             const leaves = await response.json();
@@ -669,11 +712,7 @@ async function loadLeaveTypes() {
 
 async function loadUserLeaves() {
     try {
-        const response = await fetch(`${API_BASE}/leaves`, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
+        const response = await apiFetch('/leaves');
 
         if (response.ok) {
             const leaves = await response.json();
@@ -690,20 +729,50 @@ async function loadUserLeaves() {
 function displayLeaves(leaves) {
     const container = document.getElementById('leaves-list');
     if (!container) return;
-    
-    if (leaves.length === 0) {
+    if (!Array.isArray(leaves) || leaves.length === 0) {
         container.innerHTML = '<p style="text-align: center; color: #718096;">No leave requests found.</p>';
         return;
     }
 
-    container.innerHTML = leaves.map(leave => `
-        <div class="leave-item">
+    // Deduplicate leaves by id (sometimes duplicates can appear from joins or accidental re-fetches)
+    const byId = new Map();
+    for (const l of leaves) {
+        if (!l) continue;
+        // Prefer object with id; if missing, try createdAt fallback key (unlikely)
+        const key = l.id || `${l.startDate}_${l.endDate}_${l.numberOfDays}_${l.reason}`;
+        if (!byId.has(key)) byId.set(key, l);
+    }
+
+    const uniqueLeaves = Array.from(byId.values());
+
+    // Sort by createdAt descending if available, otherwise keep original order
+    uniqueLeaves.sort((a, b) => {
+        const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tb - ta;
+    });
+
+    // Quick-render dedupe: avoid re-rendering identical lists repeatedly (helps if load is called multiple times)
+    try {
+        const idList = uniqueLeaves.map(l => l.id || `${l.startDate}_${l.endDate}_${l.numberOfDays}`).join(',');
+        if (container.dataset.lastLeaves === idList) {
+            // already rendered same list recently
+            console.debug('displayLeaves: skipping render, list unchanged');
+            return;
+        }
+        container.dataset.lastLeaves = idList;
+    } catch (e) {
+        // ignore hashing errors and continue to render
+    }
+
+    container.innerHTML = uniqueLeaves.map(leave => `
+        <div class="leave-item" data-leave-id="${leave.id || ''}">
             <div>
                 <h4>${leave.reason}</h4>
                 <p>${new Date(leave.startDate).toLocaleDateString()} - ${new Date(leave.endDate).toLocaleDateString()}</p>
                 <p>${leave.numberOfDays} days</p>
             </div>
-            <span class="leave-status status-${leave.status}">${leave.status.toUpperCase()}</span>
+            <span class="leave-status status-${leave.status}">${(leave.status || '').toUpperCase()}</span>
         </div>
     `).join('');
 }
@@ -717,7 +786,9 @@ async function loadNotifications() {
         });
 
         if (response.ok) {
-            const notifications = await response.json();
+            // API returns { notifications: [...], pagination: {...} }
+            const body = await response.json();
+            const notifications = Array.isArray(body) ? body : (body.notifications || []);
             displayNotifications(notifications);
         } else {
             displayNotifications([]);
@@ -752,12 +823,33 @@ function displayNotifications(notifications) {
     }
 
     container.innerHTML = notifications.map(notification => `
-        <div class="notification-item ${notification.isRead ? '' : 'unread'}" data-notification-id="${notification.id}">
-            <h4>${notification.title}</h4>
+        <div class="notification-item ${notification.isRead ? '' : 'unread'}" data-notification-id="${notification.id}" data-related-type="${notification.relatedType || ''}" data-related-id="${notification.relatedId || ''}">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <h4 style="margin:0">${notification.title}</h4>
+              ${notification.recipientRole ? `<small class="badge">${notification.recipientRole}</small>` : ''}
+            </div>
             <p>${notification.message}</p>
             <small>${new Date(notification.createdAt).toLocaleString()}</small>
         </div>
     `).join('');
+}
+
+// Open a notification: mark it read and navigate/open related resource if present
+async function openNotification(notificationId, relatedType, relatedId) {
+    try {
+        // Mark as read first
+        await markAsRead(notificationId);
+
+            // If notification is related to a leave request, open the dedicated review page
+            if (relatedType === 'leave' && relatedId) {
+                // Navigate to the dedicated review page with leaveId as query param
+                // The new page will handle auth and role checks and present the review UI for managers
+                window.location.href = `/leave-review.html?leaveId=${relatedId}`;
+                return;
+            }
+    } catch (err) {
+        console.error('Error opening notification:', err);
+    }
 }
 
 async function handleLeaveRequest(e) {
@@ -930,17 +1022,9 @@ async function handleLeaveRequest(e) {
     try {
         console.log('Making API call to:', `${API_BASE}/leaves`);
         console.log('Request method: POST');
-        console.log('Headers:', {
-            'Authorization': `Bearer ${authToken ? authToken.substring(0, 20) + '...' : 'null'}`
-        });
-        
-        const response = await fetch(`${API_BASE}/leaves`, {
+        const response = await apiFetch('/leaves', {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-                // Note: Don't set Content-Type for FormData, let the browser set it
-            },
-            body: formData
+            body: formData // apiFetch will attach Authorization header and will not override Content-Type for FormData
         });
 
         console.log('Response received:', {
@@ -3219,17 +3303,22 @@ function displayLeaveApprovals(approvals) {
 // Approve a leave request
 async function approveLeave(leaveId) {
     try {
-        const response = await fetch(`${API_BASE}/leaves/${leaveId}/approve`, {
+        // If manager provided notes in modal, include them
+        const managerNotesEl = document.getElementById('manager-notes');
+        const payload = { action: 'approve' };
+        if (managerNotesEl && managerNotesEl.value && managerNotesEl.value.trim().length) {
+            payload.managerNotes = managerNotesEl.value.trim();
+        }
+
+        const response = await apiFetch(`/leaves/${leaveId}/approve`, {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
-            body: JSON.stringify({ action: 'approve' })
+            body: JSON.stringify(payload)
         });
 
         if (response.ok) {
             showAlert('Leave request approved successfully', 'success');
+            // Close any open leave modal
+            document.querySelectorAll('.modal').forEach(m => m.remove());
             await loadLeaveApprovals(); // Refresh the list
         } else {
             const error = await response.json();
@@ -3248,20 +3337,22 @@ async function rejectLeave(leaveId) {
     if (!rejectionReason) return; // User cancelled
     
     try {
-        const response = await fetch(`${API_BASE}/leaves/${leaveId}/approve`, {
+        // include optional manager notes if present
+        const managerNotesEl = document.getElementById('manager-notes');
+        const payload = { action: 'reject', rejectionReason };
+        if (managerNotesEl && managerNotesEl.value && managerNotesEl.value.trim().length) {
+            payload.managerNotes = managerNotesEl.value.trim();
+        }
+
+        const response = await apiFetch(`/leaves/${leaveId}/approve`, {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`
-            },
-            body: JSON.stringify({ 
-                action: 'reject',
-                rejectionReason: rejectionReason
-            })
+            body: JSON.stringify(payload)
         });
 
         if (response.ok) {
             showAlert('Leave request rejected successfully', 'success');
+            // Close modal and refresh
+            document.querySelectorAll('.modal').forEach(m => m.remove());
             await loadLeaveApprovals(); // Refresh the list
         } else {
             const error = await response.json();
@@ -3320,11 +3411,7 @@ function showRejectionReasonModal() {
 // View leave details
 async function viewLeaveDetails(leaveId) {
     try {
-        const response = await fetch(`${API_BASE}/leaves/${leaveId}`, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
+        const response = await apiFetch(`/leaves/${leaveId}`);
 
         if (response.ok) {
             const data = await response.json();
@@ -3389,6 +3476,18 @@ function showLeaveDetailsModal(leave) {
                         <div class="detail-row">
                             <span class="detail-label">Rejection Reason:</span>
                             <span class="detail-value">${leave.rejectionReason}</span>
+                        </div>
+                    ` : ''}
+                    ${ (currentUser && ['manager','hr','admin'].includes(currentUser.role) && leave.status === 'pending') ? `
+                        <div class="detail-row">
+                            <div class="manager-action-form" style="margin-top:1rem;">
+                                <label for="manager-notes">Manager Notes (optional)</label>
+                                <textarea id="manager-notes" rows="3" placeholder="Add notes for the employee or record..." style="width:100%;"></textarea>
+                                <div style="margin-top:0.5rem; display:flex; gap:8px;">
+                                    <button class="btn btn-approve" onclick="approveLeave(${leave.id})"><i class="fas fa-check"></i> Approve</button>
+                                    <button class="btn btn-reject" onclick="rejectLeave(${leave.id})"><i class="fas fa-times"></i> Reject</button>
+                                </div>
+                            </div>
                         </div>
                     ` : ''}
                 </div>
@@ -3471,11 +3570,7 @@ function updateLeaveBalanceDisplay(balances) {
 
 async function loadMyLeaves() {
     try {
-        const response = await fetch(`${API_BASE}/leaves/my-leaves`, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
+        const response = await apiFetch('/leaves/my-leaves');
 
         if (response.ok) {
             const data = await response.json();
@@ -3513,41 +3608,59 @@ async function loadNotifications() {
     try {
         const response = await fetch(`${API_BASE}/notifications`, {
             headers: {
-                'Authorization': `Bearer ${authToken}`
+                'Authorization': `Bearer ${getAuthToken()}`
             }
         });
 
         if (response.ok) {
-            const data = await response.json();
-            displayNotifications(data.notifications);
-            updateNotificationCount(data.notifications.length);
+            const body = await response.json();
+            const notifications = Array.isArray(body) ? body : (body.notifications || []);
+            displayNotifications(notifications);
+            updateNotificationCount(notifications.length);
+        } else {
+            displayNotifications([]);
+            updateNotificationCount(0);
         }
     } catch (error) {
         console.error('Error loading notifications:', error);
+        displayNotifications([]);
+        updateNotificationCount(0);
     }
 }
 
 function displayNotifications(notifications) {
     const container = document.getElementById('notifications-list');
+    const countElement = document.getElementById('notification-count');
     
-    if (!notifications || notifications.length === 0) {
+    if (!container) return;
+    
+    // Ensure notifications is an array
+    if (!Array.isArray(notifications)) {
+        console.warn('Notifications is not an array:', notifications);
+        notifications = [];
+    }
+    
+    if (notifications.length === 0) {
         container.innerHTML = '<p style="text-align: center; color: #718096;">No notifications found.</p>';
+        if (countElement) countElement.textContent = '0 notifications';
         return;
     }
 
+    if (countElement) {
+        const unreadCount = notifications.filter(n => !n.isRead).length;
+        countElement.textContent = `${notifications.length} notifications (${unreadCount} unread)`;
+    }
+
     container.innerHTML = notifications.map(notification => `
-        <div class="notification-item ${notification.isRead ? 'read' : 'unread'}" data-notification-id="${notification.id}">
-            <div class="notification-content">
-                <h4>${notification.title}</h4>
-                <p>${notification.message}</p>
-                <small>${new Date(notification.createdAt).toLocaleDateString()}</small>
+        <div class="notification-item ${notification.isRead ? '' : 'unread'}" data-notification-id="${notification.id}" data-related-type="${notification.relatedType || ''}" data-related-id="${notification.relatedId || ''}">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <h4 style="margin:0">${notification.title}</h4>
+              ${notification.recipientRole ? `<small class="badge">${notification.recipientRole}</small>` : ''}
             </div>
+            <p>${notification.message}</p>
+            <small>${new Date(notification.createdAt).toLocaleString()}</small>
         </div>
     `).join('');
-}
-
-function updateNotificationCount(count) {
-    document.getElementById('notification-count').textContent = `${count} notification${count !== 1 ? 's' : ''}`;
 }
 
 async function markAsRead(notificationId) {
@@ -3555,7 +3668,7 @@ async function markAsRead(notificationId) {
         const response = await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
             method: 'PUT',
             headers: {
-                'Authorization': `Bearer ${authToken}`
+                'Authorization': `Bearer ${getAuthToken()}`
             }
         });
 
@@ -3574,10 +3687,10 @@ async function markAsRead(notificationId) {
 
 async function markAllAsRead() {
     try {
-        const response = await fetch(`${API_BASE}/notifications/mark-all-read`, {
+        const response = await fetch(`${API_BASE}/notifications/read-all`, {
             method: 'PUT',
             headers: {
-                'Authorization': `Bearer ${authToken}`
+                'Authorization': `Bearer ${getAuthToken()}`
             }
         });
 

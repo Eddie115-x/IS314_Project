@@ -1,6 +1,8 @@
 const express = require('express');
 const { query, validationResult } = require('express-validator');
 const { Notification } = require('../models');
+const { Op } = require('sequelize');
+const { authorizeRoles } = require('../middleware/auth');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -26,7 +28,14 @@ router.get('/', authenticateToken, [
     const { isRead, type, category, page = 1, limit = 10 } = req.query;
     const offset = (page - 1) * limit;
 
-    const whereClause = { userId: req.user.id };
+    // Users always see notifications explicitly addressed to them.
+    // Additionally, include notifications targeted at their role (e.g., manager/HR) so role-targeted messages are visible in lists.
+    const whereClause = {
+      [Op.or]: [
+        { userId: req.user.id },
+        { recipientRole: req.user.role }
+      ]
+    };
     if (isRead !== undefined) whereClause.isRead = isRead;
     if (type) whereClause.type = type;
     if (category) whereClause.category = category;
@@ -189,11 +198,17 @@ router.get('/:id', authenticateToken, async (req, res) => {
       });
     }
 
+    // Enforce access: user can view notification if any of:
+    // - they are the explicit recipient (notification.userId === req.user.id)
+    // - the notification has a recipientRole and the user's role matches that role (e.g., manager/HR notifications)
+    // This allows role-targeted notifications to be visible to users in that role while preventing employees from accessing manager/HR notifications.
     if (notification.userId !== req.user.id) {
-      return res.status(403).json({
-        error: 'Access Denied',
-        message: 'You can only view your own notifications'
-      });
+      if (!notification.recipientRole || notification.recipientRole !== req.user.role) {
+        return res.status(403).json({
+          error: 'Access Denied',
+          message: 'You can only view your own notifications'
+        });
+      }
     }
 
     res.json({ notification });
@@ -202,6 +217,57 @@ router.get('/:id', authenticateToken, async (req, res) => {
     res.status(500).json({
       error: 'Notification Retrieval Failed',
       message: 'An error occurred while retrieving notification'
+    });
+  }
+});
+
+// Admin audit endpoint - list notifications across users with recipientRole and filters
+router.get('/audit/all', [authenticateToken, authorizeRoles('admin')], [
+  query('userId').optional().isInt(),
+  query('recipientRole').optional().isIn(['employee','manager','hr','admin']),
+  query('category').optional().isIn(['leave_request', 'leave_approval', 'leave_rejection', 'system', 'reminder']),
+  query('page').optional().isInt({ min: 1 }),
+  query('limit').optional().isInt({ min: 1, max: 200 })
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        error: 'Validation Error',
+        message: 'Please check your query parameters',
+        details: errors.array()
+      });
+    }
+
+    const { userId, recipientRole, category, page = 1, limit = 50 } = req.query;
+    const offset = (page - 1) * limit;
+
+    const whereClause = {};
+    if (userId) whereClause.userId = parseInt(userId);
+    if (recipientRole) whereClause.recipientRole = recipientRole;
+    if (category) whereClause.category = category;
+
+    const { count, rows: notifications } = await Notification.findAndCountAll({
+      where: whereClause,
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+    res.json({
+      notifications,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(count / limit),
+        totalItems: count,
+        itemsPerPage: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    console.error('Audit notifications error:', error);
+    res.status(500).json({
+      error: 'Audit Retrieval Failed',
+      message: 'An error occurred while retrieving notifications for audit'
     });
   }
 });

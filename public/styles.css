@@ -399,6 +399,97 @@ body::before {
     color: #93c5fd;
 }
 
+/* Leave review detail card */
+.leave-detail-card {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 24px;
+    background: var(--card-bg);
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    color: var(--text-primary);
+}
+.leave-detail-main {
+    min-width: 0;
+}
+.leave-detail-side {
+    background: rgba(255,255,255,0.98);
+    padding: 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    height: fit-content;
+}
+.detail-row {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+.detail-label {
+    min-width: 120px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.detail-value {
+    flex: 1;
+    color: var(--text-primary);
+}
+.leave-status.pending { color: var(--warning-color); font-weight:700; }
+.leave-status.approved { color: var(--success-color); font-weight:700; }
+.leave-status.rejected { color: var(--error-color); font-weight:700; }
+
+/* Manager notes and fixed action buttons */
+.manager-notes label { display:block; margin-bottom:6px; color:var(--text-secondary); font-weight:600; }
+.manager-notes textarea.manager-notes { resize:vertical; min-height:64px; }
+.action-fixed-btn { padding:10px 18px; border-radius:10px; }
+
+@media (max-width: 900px) {
+    .leave-detail-card { grid-template-columns: 1fr; }
+    .leave-detail-side { order: 2; }
+}
+
+/* Read-only form for manager review */
+.leave-request-form {
+    background: rgba(255,255,255,0.98);
+    padding: 16px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+    border: 1px solid var(--border-color);
+}
+.leave-request-form .form-row {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+}
+.leave-request-form label {
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+.leave-request-form input[disabled],
+.leave-request-form textarea[disabled] {
+    background: #f7fafc;
+    border: 1px solid var(--border-color);
+    padding: 8px 10px;
+    border-radius: 8px;
+    color: var(--text-primary);
+}
+.leave-request-form a { color: var(--info-color); font-weight:600; }
+
+.form-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+}
+
+/* Ensure buttons inside action containers don't stretch full width (allow side-by-side layout) */
+.form-actions .btn,
+.review-actions .btn {
+    width: auto; /* override global .btn width:100% */
+    flex: 0 0 auto;
+}
+
 .logout-btn {
     background: none;
     border: none;
@@ -711,6 +802,52 @@ body::before {
 .notification-item small {
     color: #a0aec0;
     font-size: 12px;
+}
+
+/* Leave review page styles */
+.review-actions {
+    position: fixed;
+    left: 270px; /* account for sidebar width */
+    right: 30px;
+    bottom: 20px;
+    background: white;
+    padding: 16px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 2000;
+}
+
+.review-actions .manager-notes {
+    flex: 1;
+}
+
+.leave-detail-card {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+}
+
+.leave-detail-main {
+    padding: 16px;
+}
+
+.leave-detail-side {
+    padding: 16px;
+}
+
+.detail-row { margin-bottom: 12px; }
+.detail-label { display:block; color:var(--text-secondary); font-size:13px; margin-bottom:6px; }
+.detail-value { font-size:15px; color:var(--text-primary); }
+
+.action-fixed-btn { width: 160px; }
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .review-actions { left: 16px; right: 16px; }
+  .leave-detail-card { grid-template-columns: 1fr; }
 }
 
 /* Profile Section */

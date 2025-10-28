@@ -35,6 +35,11 @@ module.exports = (sequelize) => {
       type: DataTypes.ENUM('leave_request', 'leave_approval', 'leave_rejection', 'system', 'reminder'),
       allowNull: false
     },
+    // Optional intended recipient role (used for role-targeted notifications)
+    recipientRole: {
+      type: DataTypes.ENUM('employee', 'manager', 'hr', 'admin'),
+      allowNull: true
+    },
     isRead: {
       type: DataTypes.BOOLEAN,
       defaultValue: false

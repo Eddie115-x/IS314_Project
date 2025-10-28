@@ -48,15 +48,41 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Rate limiting
+// Configurable via environment variables:
+// RATE_LIMIT_WINDOW_MS - window in ms (default 15 minutes)
+// RATE_LIMIT_MAX_REQUESTS - max requests per window (default 1000)
+// RATE_LIMIT_WHITELIST - comma separated list of IPs to exempt (e.g. 127.0.0.1,::1)
+const rateLimitWindow = parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000; // 15 minutes
+const rateLimitMax = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000;
+const rawWhitelist = process.env.RATE_LIMIT_WHITELIST || '127.0.0.1,::1';
+const RATE_LIMIT_WHITELIST = rawWhitelist.split(',').map(s => s.trim()).filter(Boolean);
+
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000, // limit each IP to 1000 requests per windowMs (increased for testing)
-  message: 'Too many requests from this IP, please try again later.',
+  windowMs: rateLimitWindow,
+  max: rateLimitMax,
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Allow whitelisted IPs to skip rate limiting (useful during local development)
+  skip: (req) => {
+    try {
+      const ip = req.ip || req.connection && req.connection.remoteAddress || '';
+      if (RATE_LIMIT_WHITELIST.includes(ip)) {
+        // console.debug is intentionally quiet in production
+        console.debug('Rate limiter: skipping whitelisted IP', ip);
+        return true;
+      }
+    } catch (err) {
+      // if anything goes wrong, don't skip
+    }
+    return false;
+  },
   handler: (req, res) => {
+    const retryAfterSeconds = Math.ceil(rateLimitWindow / 1000) || 900;
+    res.set('Retry-After', String(retryAfterSeconds));
     res.status(429).json({
       error: 'Rate Limit Exceeded',
       message: 'Too many requests from this IP, please try again later.',
-      retryAfter: Math.ceil(parseInt(process.env.RATE_LIMIT_WINDOW_MS) / 1000)
+      retryAfter: retryAfterSeconds
     });
   }
 });
