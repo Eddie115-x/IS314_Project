@@ -1,8 +1,9 @@
-const { Notification, User } = require('../models');
+const { sequelize, Notification, User } = require('../models');
 const { Op } = require('sequelize');
 
 const createNotification = async (notificationData) => {
   try {
+    console.log('createNotification: creating single notification with payload:', notificationData);
     const notification = await Notification.create(notificationData);
     
     // Emit real-time notification if socket.io is available
@@ -27,7 +28,29 @@ const createNotification = async (notificationData) => {
 
 const sendBulkNotifications = async (notifications) => {
   try {
-    const createdNotifications = await Notification.bulkCreate(notifications);
+    // Use returning: true so Postgres returns created rows with IDs
+    console.log('sendBulkNotifications: creating', notifications.length, 'notifications');
+    // Log a small sample of payload to help debugging
+    try { console.log('sendBulkNotifications: payload sample', notifications.slice(0,5)); } catch (e) { /* ignore */ }
+
+    let createdNotifications;
+    try {
+      createdNotifications = await Notification.bulkCreate(notifications, { returning: true });
+      console.log('sendBulkNotifications: created', (createdNotifications || []).length, 'notifications via bulkCreate');
+    } catch (bulkErr) {
+      console.error('sendBulkNotifications: bulkCreate failed:', bulkErr);
+      // Fallback: try to create one-by-one to surface validation errors per-item
+      createdNotifications = [];
+      for (const item of notifications) {
+        try {
+          const n = await Notification.create(item);
+          createdNotifications.push(n);
+        } catch (itemErr) {
+          console.error('sendBulkNotifications: failed to create individual notification:', item, itemErr && itemErr.message ? itemErr.message : itemErr);
+        }
+      }
+      console.log('sendBulkNotifications: created', createdNotifications.length, 'notifications via individual create fallback');
+    }
     
     // Emit real-time notifications
     const io = require('../server').io;
@@ -46,7 +69,7 @@ const sendBulkNotifications = async (notifications) => {
     
     return createdNotifications;
   } catch (error) {
-    console.error('Error sending bulk notifications:', error);
+    console.error('Error sending bulk notifications (outer):', error);
     throw error;
   }
 };
@@ -122,6 +145,8 @@ const createLeaveSubmissionNotifications = async (leave, submitter) => {
         }
       });
 
+      console.log(`createLeaveSubmissionNotifications: found ${managers.length} managers/hr/admin to notify`);
+
       managers.forEach(m => {
         notifications.push({
           userId: m.id,
@@ -137,7 +162,11 @@ const createLeaveSubmissionNotifications = async (leave, submitter) => {
     }
 
     // Use bulk creation which will also emit socket events
+    // Log notifications payload for debugging
+    console.log('createLeaveSubmissionNotifications: payload count', notifications.length);
+
     const created = await sendBulkNotifications(notifications);
+    console.log('createLeaveSubmissionNotifications: created count', created ? created.length : 0);
     return created;
   } catch (error) {
     console.error('Error creating leave submission notifications:', error);

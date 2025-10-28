@@ -36,6 +36,7 @@ async function apiFetch(path, options = {}) {
     return res;
 }
 let selectedFiles = []; // Global variable to store selected files
+let socket = null;
 
 // Wait for DOM to be fully loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -286,6 +287,8 @@ function updateUserInfo() {
     // Load user-specific data
     loadUserLeaveBalances();
     loadNotifications();
+    // Initialize realtime notifications (socket.io) for this user
+    try { initRealtimeNotifications(); } catch (e) { console.warn('initRealtimeNotifications failed', e); }
 }
 
     // Add event listeners for forms when they are dynamically loaded
@@ -777,62 +780,6 @@ function displayLeaves(leaves) {
     `).join('');
 }
 
-async function loadNotifications() {
-    try {
-        const response = await fetch(`${API_BASE}/notifications`, {
-            headers: {
-                'Authorization': `Bearer ${authToken}`
-            }
-        });
-
-        if (response.ok) {
-            // API returns { notifications: [...], pagination: {...} }
-            const body = await response.json();
-            const notifications = Array.isArray(body) ? body : (body.notifications || []);
-            displayNotifications(notifications);
-        } else {
-            displayNotifications([]);
-        }
-    } catch (error) {
-        console.error('Error loading notifications:', error);
-        displayNotifications([]);
-    }
-}
-
-function displayNotifications(notifications) {
-    const container = document.getElementById('notifications-list');
-    const countElement = document.getElementById('notification-count');
-    
-    if (!container) return;
-    
-    // Ensure notifications is an array
-    if (!Array.isArray(notifications)) {
-        console.warn('Notifications is not an array:', notifications);
-        notifications = [];
-    }
-    
-    if (notifications.length === 0) {
-        container.innerHTML = '<p style="text-align: center; color: #718096;">No notifications found.</p>';
-        if (countElement) countElement.textContent = '0 notifications';
-        return;
-    }
-
-    if (countElement) {
-        const unreadCount = notifications.filter(n => !n.isRead).length;
-        countElement.textContent = `${notifications.length} notifications (${unreadCount} unread)`;
-    }
-
-    container.innerHTML = notifications.map(notification => `
-        <div class="notification-item ${notification.isRead ? '' : 'unread'}" data-notification-id="${notification.id}" data-related-type="${notification.relatedType || ''}" data-related-id="${notification.relatedId || ''}">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-              <h4 style="margin:0">${notification.title}</h4>
-              ${notification.recipientRole ? `<small class="badge">${notification.recipientRole}</small>` : ''}
-            </div>
-            <p>${notification.message}</p>
-            <small>${new Date(notification.createdAt).toLocaleString()}</small>
-        </div>
-    `).join('');
-}
 
 // Open a notification: mark it read and navigate/open related resource if present
 async function openNotification(notificationId, relatedType, relatedId) {
@@ -1043,6 +990,8 @@ async function handleLeaveRequest(e) {
             // Clear selected files
             selectedFiles = [];
             displaySelectedFiles();
+            // Refresh notifications and dashboard immediately so managers/HR (if viewing) see updates
+            try { loadNotifications(); } catch (e) { console.warn('loadNotifications failed after submit', e); }
             loadDashboardData();
         } else {
             console.log('API returned error:', result);
@@ -1138,9 +1087,9 @@ function showAlert(message, type = 'info') {
     const alert = document.createElement('div');
     alert.className = `alert alert-${type}`;
     alert.textContent = message;
-    
+
     document.body.appendChild(alert);
-    
+
     // Auto-remove after 5 seconds
     setTimeout(() => {
         if (alert.parentNode) {
@@ -1151,28 +1100,28 @@ function showAlert(message, type = 'info') {
 
 function showLoading(formId) {
     const form = document.getElementById(formId);
-    if (form) {
-        const submitBtn = form.querySelector('button[type="submit"]');
-        if (submitBtn) {
-            // Preserve original text once
-            if (!submitBtn.getAttribute('data-original-text')) {
-                submitBtn.setAttribute('data-original-text', submitBtn.innerHTML);
-            }
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
-        }
+    if (!form) return;
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (!submitBtn) return;
+
+    // Preserve original text once
+    if (!submitBtn.getAttribute('data-original-text')) {
+        submitBtn.setAttribute('data-original-text', submitBtn.innerHTML);
     }
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
 }
 
 function hideLoading(formId) {
     const form = document.getElementById(formId);
-    if (form) {
-        const submitBtn = form.querySelector('button[type="submit"]');
-        if (submitBtn) {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = submitBtn.getAttribute('data-original-text') || submitBtn.innerHTML || 'Submit';
-        }
-    }
+    if (!form) return;
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (!submitBtn) return;
+
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = submitBtn.getAttribute('data-original-text') || submitBtn.innerHTML || 'Submit';
 }
 
 function calculateEndDate() {
@@ -3238,7 +3187,9 @@ function updateApprovalStats() {
 // Display leave approvals in the UI
 function displayLeaveApprovals(approvals) {
     const container = document.getElementById('approvals-list');
-    
+
+    if (!container) return;
+
     if (!approvals || approvals.length === 0) {
         container.innerHTML = `
             <div class="no-data">
@@ -3249,61 +3200,36 @@ function displayLeaveApprovals(approvals) {
         return;
     }
 
+    // Render a compact approval card for each leave
     container.innerHTML = approvals.map(leave => `
         <div class="approval-item" data-leave-id="${leave.id}">
             <div class="approval-header">
                 <div class="approval-employee">
-                    <div class="employee-avatar">
-                        ${leave.User.firstName.charAt(0)}${leave.User.lastName.charAt(0)}
-                    </div>
+                    <div class="employee-avatar">${leave.User.firstName.charAt(0)}${leave.User.lastName.charAt(0)}</div>
                     <div class="employee-info">
                         <h4>${leave.User.firstName} ${leave.User.lastName}</h4>
                         <p>${leave.User.department} • ${leave.User.position}</p>
                     </div>
                 </div>
-                <span class="approval-status ${leave.status}">${leave.status}</span>
-            </div>
-            
-            <div class="approval-details">
-                <div class="detail-group">
-                    <label>Leave Type</label>
-                    <span style="color: ${leave.leaveType.color}">${leave.leaveType.name}</span>
-                </div>
-                <div class="detail-group">
-                    <label>Duration</label>
-                    <span>${leave.numberOfDays} days (${leave.startDate} to ${leave.endDate})</span>
-                </div>
-                <div class="detail-group">
-                    <label>Reason</label>
-                    <span>${leave.reason}</span>
-                </div>
-                <div class="detail-group">
-                    <label>Submitted</label>
+                <div class="approval-meta">
+                    <span>${leave.numberOfDays} days</span>
                     <span>${new Date(leave.createdAt).toLocaleDateString()}</span>
                 </div>
             </div>
-            
+            <div class="approval-body">
+                <p>${leave.reason}</p>
+            </div>
             <div class="approval-actions">
-                ${leave.status === 'pending' ? `
-                    <button class="btn btn-approve" onclick="approveLeave(${leave.id})">
-                        <i class="fas fa-check"></i> Approve
-                    </button>
-                    <button class="btn btn-reject" onclick="rejectLeave(${leave.id})">
-                        <i class="fas fa-times"></i> Reject
-                    </button>
-                ` : ''}
-                <button class="btn btn-view" onclick="viewLeaveDetails(${leave.id})">
-                    <i class="fas fa-eye"></i> View Details
-                </button>
+                <button class="btn btn-approve" onclick="approveLeave(${leave.id})">Approve</button>
+                <button class="btn btn-reject" onclick="rejectLeave(${leave.id})">Reject</button>
             </div>
         </div>
     `).join('');
 }
 
-// Approve a leave request
+// Approve a leave request (kept separate from rendering)
 async function approveLeave(leaveId) {
     try {
-        // If manager provided notes in modal, include them
         const managerNotesEl = document.getElementById('manager-notes');
         const payload = { action: 'approve' };
         if (managerNotesEl && managerNotesEl.value && managerNotesEl.value.trim().length) {
@@ -3317,9 +3243,9 @@ async function approveLeave(leaveId) {
 
         if (response.ok) {
             showAlert('Leave request approved successfully', 'success');
-            // Close any open leave modal
+            // Close any open modal and refresh approvals
             document.querySelectorAll('.modal').forEach(m => m.remove());
-            await loadLeaveApprovals(); // Refresh the list
+            await loadLeaveApprovals();
         } else {
             const error = await response.json();
             showAlert(error.message || 'Failed to approve leave request', 'error');
@@ -3755,4 +3681,64 @@ function showAlert(message, type = 'info') {
             alert.parentNode.removeChild(alert);
         }
     }, 5000);
+}
+
+// Initialize realtime notifications via socket.io (if client library present)
+function initRealtimeNotifications() {
+    try {
+        if (!currentUser || !currentUser.id) return;
+        if (typeof io === 'undefined') {
+            console.warn('socket.io client not available (io undefined). Real-time notifications disabled.');
+            return;
+        }
+
+        // Avoid reconnecting
+        if (socket && socket.connected) {
+            socket.emit('join', currentUser.id);
+            return;
+        }
+
+        socket = io();
+        socket.on('connect', () => {
+            console.log('Realtime socket connected:', socket.id);
+            socket.emit('join', currentUser.id);
+        });
+
+        socket.on('newNotification', (payload) => {
+            console.log('Realtime newNotification received:', payload);
+            // Show a brief alert to the user
+            try {
+                showAlert(`${payload.title}: ${payload.message}`, 'info');
+            } catch (e) { /* ignore UI errors */ }
+            // Refresh the notifications list so it's persisted and shown in UI
+            try { loadNotifications(); } catch (e) { console.warn('Failed to reload notifications on realtime event', e); }
+        });
+
+        socket.on('disconnect', () => console.log('Realtime socket disconnected'));
+        socket.on('error', (err) => console.error('Realtime socket error:', err));
+    } catch (err) {
+        console.error('initRealtimeNotifications error:', err);
+    }
+}
+
+// Update the notification count UI (kept separate so callers can reuse it)
+function updateNotificationCount(count) {
+    try {
+        const countElement = document.getElementById('notification-count');
+        if (countElement) {
+            if (!Number.isFinite(count)) count = 0;
+            const unreadText = count === 1 ? 'notification' : 'notifications';
+            countElement.textContent = `${count} ${unreadText}`;
+        }
+
+        // Optionally update the document title badge
+        if (typeof document !== 'undefined' && document.title) {
+            // Remove any existing (n) prefix first
+            const baseTitle = document.title.replace(/^\([0-9]+\)\s*/, '');
+            const prefix = (Number.isFinite(count) && count > 0) ? `(${count}) ` : '';
+            document.title = `${prefix}${baseTitle}`;
+        }
+    } catch (err) {
+        console.warn('updateNotificationCount error:', err);
+    }
 }

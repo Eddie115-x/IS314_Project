@@ -35,6 +35,9 @@ const io = socketIo(server, {
   }
 });
 
+// Export io for other modules that want to emit events
+module.exports = { io };
+
 // Global exception handlers
 process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);

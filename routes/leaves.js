@@ -4,10 +4,10 @@ const multer = require('multer');
 const path = require('path');
 const moment = require('moment');
 const { Op } = require('sequelize');
-const { Leave, LeaveType, LeaveBalance, User } = require('../models');
+const { sequelize, Leave, LeaveType, LeaveBalance, User, Notification } = require('../models');
 const { initializeEmployeeLeaveBalances } = require('../utils/leaveBalance');
 const { authenticateToken, isManagerOrHR } = require('../middleware/auth');
-const { createNotification } = require('../utils/notifications');
+const { createNotification, createLeaveSubmissionNotifications, sendBulkNotifications } = require('../utils/notifications');
 const AuditLogger = require('../utils/auditLogger');
 
 const router = express.Router();
@@ -297,8 +297,44 @@ router.post('/', [
       attachmentPath: leaveData.attachmentPath
     });
 
-    const leave = await Leave.create(leaveData);
-    console.log('Leave created successfully with ID:', leave.id);
+    // Use a transactional findOrCreate to ensure only one leave is created for the same key
+    // This defends against duplicate inserts when the client accidentally submits multiple
+    // identical requests concurrently. We match on userId, leaveTypeId, startDate, endDate,
+    // numberOfDays and pending status.
+    const t = await sequelize.transaction();
+    let leave;
+    try {
+      const [foundLeave, created] = await Leave.findOrCreate({
+        where: {
+          userId: req.user.id,
+          leaveTypeId,
+          startDate,
+          endDate,
+          numberOfDays,
+          status: 'pending'
+        },
+        defaults: leaveData,
+        transaction: t
+      });
+
+      if (!created) {
+        // Roll back and return the existing record instead of creating a duplicate
+        await t.rollback();
+        console.warn('Duplicate leave submission prevented by findOrCreate, existing id:', foundLeave.id);
+        return res.status(409).json({
+          error: 'Duplicate Submission',
+          message: 'A similar leave request already exists. Please check your leave history.',
+          existing: foundLeave
+        });
+      }
+
+      await t.commit();
+      leave = foundLeave;
+      console.log('Leave created successfully with ID:', leave.id);
+    } catch (createErr) {
+      try { await t.rollback(); } catch (rbErr) { console.error('Rollback error:', rbErr); }
+      throw createErr;
+    }
 
     // Log leave creation
     await AuditLogger.logDataModification(req.user.id, 'leave', leave.id, 'create', null, {
@@ -311,10 +347,58 @@ router.post('/', [
 
     // Create tailored notifications for this submission (employee + manager(s)) in one operation
     try {
-      await createLeaveSubmissionNotifications(leave, req.user);
+      // Ensure both employee and manager notifications are created
+      let notifications = await createLeaveSubmissionNotifications(leave, req.user);
+      // Some DBs or bulk operations may return an empty array on failure - treat that as an error
+      if (!notifications || notifications.length === 0) {
+        throw new Error('No notifications were created by helper');
+      }
+      console.log('Notifications created for leave submission:', notifications.map(n => ({ id: n.id, userId: n.userId, recipientRole: n.recipientRole, title: n.title })));
     } catch (notifErr) {
-      console.error('Failed to create leave submission notifications:', notifErr);
-      // Do not block the response if notifications fail
+      console.error('Failed to create leave submission notifications via helper:', notifErr);
+      // Fallback: try to create notifications directly here so we don't lose them
+      try {
+        const fallback = [];
+        // Employee confirmation
+        fallback.push({
+          userId: req.user.id,
+          title: 'Leave Submitted',
+          message: `${req.user.firstName} ${req.user.lastName} submitted a leave request (${leave.numberOfDays} day(s))`,
+          type: 'info',
+          category: 'system',
+          recipientRole: 'employee',
+          relatedId: leave.id,
+          relatedType: 'leave'
+        });
+
+        // Determine managers to notify
+        let managers = [];
+        if (req.user.managerId) {
+          const mgr = await User.findByPk(req.user.managerId);
+          if (mgr) managers.push(mgr);
+        } else {
+          managers = await User.findAll({ where: { role: { [Op.in]: ['manager', 'hr', 'admin'] }, isActive: true } });
+        }
+
+        managers.forEach(m => {
+          fallback.push({
+            userId: m.id,
+            title: 'New Leave Request',
+            message: `${req.user.firstName} ${req.user.lastName} has submitted a leave request (${leave.numberOfDays} day(s))`,
+            type: 'info',
+            category: 'leave_request',
+            recipientRole: 'manager',
+            relatedId: leave.id,
+            relatedType: 'leave'
+          });
+        });
+
+        console.log('Fallback: creating', fallback.length, 'notifications directly');
+        const created = await sendBulkNotifications(fallback);
+        console.log('Fallback notifications created count:', created ? created.length : 0);
+      } catch (fallbackErr) {
+        console.error('Fallback notification creation also failed:', fallbackErr);
+      }
     }
 
     console.log('Leave submission completed successfully');

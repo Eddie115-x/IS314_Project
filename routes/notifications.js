@@ -2,6 +2,7 @@ const express = require('express');
 const { query, validationResult } = require('express-validator');
 const { Notification } = require('../models');
 const { Op } = require('sequelize');
+const Sequelize = require('sequelize');
 const { authorizeRoles } = require('../middleware/auth');
 const { authenticateToken } = require('../middleware/auth');
 
@@ -30,12 +31,18 @@ router.get('/', authenticateToken, [
 
     // Users always see notifications explicitly addressed to them.
     // Additionally, include notifications targeted at their role (e.g., manager/HR) so role-targeted messages are visible in lists.
+    // Use a case-insensitive comparison for recipientRole to tolerate casing differences in stored data.
+    const roleValue = (req.user && req.user.role) ? String(req.user.role).toLowerCase() : '';
     const whereClause = {
       [Op.or]: [
         { userId: req.user.id },
-        { recipientRole: req.user.role }
+        // Case-insensitive match on recipientRole; cast enum to text first so lower() works in Postgres
+        Sequelize.where(Sequelize.fn('lower', Sequelize.cast(Sequelize.col('recipientRole'), 'text')), roleValue)
       ]
     };
+
+    // Debug: log who is requesting notifications and the role used for matching
+    console.log('GET /api/notifications requested by user:', { userId: req.user.id, role: req.user.role });
     if (isRead !== undefined) whereClause.isRead = isRead;
     if (type) whereClause.type = type;
     if (category) whereClause.category = category;
@@ -46,6 +53,14 @@ router.get('/', authenticateToken, [
       limit: parseInt(limit),
       offset: parseInt(offset)
     });
+
+    // Debug: log result summary before returning
+    try {
+      const ids = notifications.map(n => n.id).slice(0, 10);
+      console.log(`GET /api/notifications -> returning ${notifications.length} rows (showing up to 10 ids):`, ids);
+    } catch (e) {
+      console.error('Error logging notifications preview:', e);
+    }
 
     res.json({
       notifications,
